@@ -3,10 +3,57 @@ import { Customer } from '@/lib/supabase'
 import { detectGender } from './genderDetector'
 
 /**
- * Interface for raw customer info data from CSV/Excel
- * Matches the expected columns from the customer information export
+ * Interface for raw customer info data from CSV
+ * Based on actual Customer Info Listing report structure from Aoikumo clinic system
  */
 export interface RawCustomerInfoRow {
+  // Main identifiers (from actual file)
+  'Date'?: string
+  'Time'?: string
+  'Last Visit Date'?: string
+  'Last Visit Time'?: string
+  'Customer'?: string
+  'Membership #'?: string
+  'Contact #1'?: string
+  'Contact #2'?: string
+  'Identification #'?: string // IC Number
+  'E-Mail'?: string
+  'Consultant'?: string
+  'Outlet'?: string
+  'Membership Type'?: string
+  'Occupation'?: string
+  'Birth Date'?: string
+  'Age'?: string | number
+  'Address 1'?: string
+  'Address 2'?: string
+  'Address 3'?: string
+  'Country'?: string
+  'State'?: string
+  'City'?: string
+  'Postcode'?: string
+  'Smoker?'?: string
+  'Drug Allergies'?: string
+  'Current Illness / Medical Condition'?: string
+  'Patient Tag'?: string
+  'Alert / Known Allergies'?: string
+  'Department'?: string
+  'Employee #'?: string
+  'Payee Origin'?: string
+  'Coverage Payors & Policies'?: string
+  'Race'?: string
+  'Religion'?: string
+  'Income Range Per Year'?: string
+  'Marital Status'?: string
+  'Preferred Language'?: string
+  'Referrer'?: string
+  'Referrer Contact'?: string
+  'Referrer Relationship'?: string
+  'System Notifications'?: string
+  'Promotional Notifications'?: string
+  'VIP'?: string
+  'Deceased'?: string
+
+  // Legacy field names (for compatibility)
   'Membership Number'?: string | number
   'Customer Name'?: string
   'Name'?: string
@@ -20,15 +67,10 @@ export interface RawCustomerInfoRow {
   'Full Address'?: string
   'Address Line 1'?: string
   'Address Line 2'?: string
-  'City'?: string
-  'State'?: string
-  'Postcode'?: string
   'Postal Code'?: string
   'Zip Code'?: string
-  'Country'?: string
   'Date of Birth'?: string | number
   'DOB'?: string | number
-  'Birth Date'?: string | number
   'Registration Date'?: string | number
   'Member Since'?: string | number
   'Join Date'?: string | number
@@ -267,13 +309,42 @@ function parseAddress(
 }
 
 /**
+ * Parse boolean values from string
+ */
+function parseBoolean(value: string | undefined, defaultValue: boolean = false): boolean {
+  if (!value) return defaultValue
+  const cleaned = value.toString().trim().toLowerCase()
+  return cleaned === 'yes' || cleaned === 'y' || cleaned === 'true' || cleaned === '1'
+}
+
+/**
+ * Parse age from string or number
+ */
+function parseAge(value: string | number | undefined): number | null {
+  if (!value || value === '' || value === '-') return null
+  const num = typeof value === 'number' ? value : parseInt(value.toString())
+  return isNaN(num) ? null : num
+}
+
+/**
+ * Parse time string
+ */
+function parseTime(value: string | undefined): string | null {
+  if (!value || value === '' || value === '-') return null
+  // Return as-is if it's already in HH:MM:SS format
+  return value.trim()
+}
+
+/**
  * Cleans a single customer info row
+ * Updated to handle actual Customer Info Listing file structure with IC number
  */
 export function cleanCustomerInfoRow(
   raw: RawCustomerInfoRow
 ): Omit<Customer, 'id' | 'created_at'> | null {
-  // Extract membership number (required field)
+  // Extract membership number - PRIMARY KEY (required field)
   const membershipNumber = (
+    raw['Membership #'] ||
     raw['Membership Number'] ||
     raw['Member Number'] ||
     raw['Member ID'] ||
@@ -286,6 +357,7 @@ export function cleanCustomerInfoRow(
 
   // Extract customer name (required field)
   const customerName = (
+    raw['Customer'] ||
     raw['Customer Name'] ||
     raw['Name'] ||
     raw['Full Name'] ||
@@ -316,71 +388,130 @@ export function cleanCustomerInfoRow(
     gender = detectGender(customerName)
   }
 
-  // Extract and clean contact number
-  const contactNumber = cleanPhoneNumber(
+  // Extract IC Number (IMPORTANT - secondary identifier)
+  const icNumber = (raw['Identification #'] || '').toString().trim() || null
+
+  // Extract and clean contact numbers
+  const contactNumber1 = cleanPhoneNumber(
+    raw['Contact #1'] ||
     raw['Contact Number'] ||
     raw['Phone'] ||
-    raw['Mobile'] ||
-    raw['Phone Number'] ||
-    raw['Mobile Number']
+    raw['Mobile']
   )
+
+  const contactNumber2 = cleanPhoneNumber(raw['Contact #2'])
 
   // Extract and clean email
   const email = cleanEmail(
+    raw['E-Mail'] ||
     raw['Email'] ||
-    raw['Email Address'] ||
-    raw['E-mail']
+    raw['Email Address']
   )
 
-  // Parse address components
+  // Parse address components (handle multiple address fields)
   const addressComponents = parseAddress(
-    raw['Address'] || raw['Address Line 1'] || raw['Full Address'],
-    raw['Address Line 2'],
+    raw['Address 1'] || raw['Address'] || raw['Address Line 1'],
+    raw['Address 2'] || raw['Address Line 2'],
     raw['City'],
     raw['State'],
     raw['Postcode'] || raw['Postal Code'] || raw['Zip Code'],
     raw['Country']
   )
 
+  // Extract age
+  const age = parseAge(raw['Age'])
+
   // Parse dates
   const dateOfBirth = parseDate(
+    raw['Birth Date'] ||
     raw['Date of Birth'] ||
     raw['DOB'] ||
     raw['Birth Date'] ||
     raw['Birthdate']
   )
 
-  const registrationDate = parseDate(
-    raw['Registration Date'] ||
-    raw['Member Since'] ||
-    raw['Join Date'] ||
-    raw['Created Date'] ||
-    raw['Signup Date']
-  )
+  // Parse all dates
+  const registrationDate = parseDate(raw['Date'])
+  const lastVisitDate = parseDate(raw['Last Visit Date'])
+  const createdTime = parseTime(raw['Time'])
+  const lastVisitTime = parseTime(raw['Last Visit Time'])
 
-  // Parse last visit date if available
-  const lastVisitDate = parseDate(
-    raw['Last Visit'] ||
-    raw['Last Visit Date'] ||
-    raw['Last Transaction Date']
-  )
+  // Extract additional address field
+  const address3 = (raw['Address 3'] || '').toString().trim() || null
+
+  // Clean string fields
+  const cleanString = (val: any): string | null => {
+    if (!val || val === '' || val === '-' || val === 'N/A') return null
+    return val.toString().trim()
+  }
 
   return {
     membership_number: membershipNumber,
     name: customerName,
-    gender: gender,
-    contact_number: contactNumber,
     email: email,
+    phone: contactNumber1,
+    phone2: contactNumber2,
+
+    // IC and Demographics
+    ic_number: icNumber,
+    age: age,
+    birth_date: dateOfBirth,
+    gender: gender,
+    marital_status: cleanString(raw['Marital Status']),
+    occupation: cleanString(raw['Occupation']),
+    income_range: cleanString(raw['Income Range Per Year']),
+    race: cleanString(raw['Race']),
+    religion: cleanString(raw['Religion']),
+    preferred_language: cleanString(raw['Preferred Language']),
+
+    // Medical Information
+    drug_allergies: cleanString(raw['Drug Allergies']),
+    medical_conditions: cleanString(raw['Current Illness / Medical Condition']),
+    alerts: cleanString(raw['Alert / Known Allergies']),
+    smoker: parseBoolean(raw['Smoker?']),
+    patient_tag: cleanString(raw['Patient Tag']),
+
+    // Address
     address: addressComponents.address,
+    address2: cleanString(raw['Address 2']),
+    address3: address3,
     city: addressComponents.city,
     state: addressComponents.state,
     postcode: addressComponents.postcode,
     country: addressComponents.country,
-    date_of_birth: dateOfBirth,
+
+    // Membership Information
+    membership_type: cleanString(raw['Membership Type']) || 'BRONZE',
+    consultant: cleanString(raw['Consultant']),
+    outlet: cleanString(raw['Outlet']),
+    vip: parseBoolean(raw['VIP']),
+    deceased: parseBoolean(raw['Deceased']),
+    department: cleanString(raw['Department']),
+    employee_number: cleanString(raw['Employee #']),
+    payee_origin: cleanString(raw['Payee Origin']),
+    coverage_policies: cleanString(raw['Coverage Payors & Policies']),
+
+    // Referral Information
+    referrer: cleanString(raw['Referrer']),
+    referrer_contact: cleanString(raw['Referrer Contact']),
+    referrer_relationship: cleanString(raw['Referrer Relationship']),
+
+    // Preferences
+    system_notifications: parseBoolean(raw['System Notifications'], true),
+    promotional_notifications: parseBoolean(raw['Promotional Notifications'], true),
+
+    // Timestamps
+    created_date: registrationDate,
+    created_time: createdTime,
+    last_visit_date: lastVisitDate,
+    last_visit_time: lastVisitTime,
     registration_date: registrationDate,
-    total_spending: 0, // Will be calculated from transactions
-    visit_count: 0, // Will be calculated from transactions
-    last_visit_date: lastVisitDate
+
+    // Legacy fields for compatibility
+    date_of_birth: dateOfBirth,
+    contact_number: contactNumber1,
+    total_spending: 0, // Will be updated from visit frequency
+    visit_count: 0 // Will be updated from visit frequency
   }
 }
 

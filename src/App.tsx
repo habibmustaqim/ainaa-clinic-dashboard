@@ -7,16 +7,16 @@ import UploadPage from './pages/UploadPage'
 
 function App() {
   return (
-    <CustomerProvider>
-      <Router>
+    <Router>
+      <CustomerProvider>
         <Routes>
           <Route path="/" element={<Homepage />} />
           <Route path="/patient/:customerId" element={<PatientDashboard />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/upload" element={<UploadPage />} />
         </Routes>
-      </Router>
-    </CustomerProvider>
+      </CustomerProvider>
+    </Router>
   )
 }
 
