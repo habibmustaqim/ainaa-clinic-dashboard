@@ -23,6 +23,9 @@ export interface BentoCardProps {
   // Grid span
   colSpan?: 1 | 2 | 3 | 4
   rowSpan?: 1 | 2 | 3 | 4
+
+  // Loading state
+  loading?: boolean
 }
 
 const sizeClasses = {
@@ -71,6 +74,7 @@ export const BentoCard = React.forwardRef<HTMLDivElement, BentoCardProps>(
     size = 'md',
     colSpan = 1,
     rowSpan = 1,
+    loading,
     ...props
   }, ref) => {
     const variantClasses = {

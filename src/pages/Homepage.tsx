@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   Package,
-  Award
+  Award,
+  Users,
+  ShoppingBag
 } from 'lucide-react'
 import { supabase, Customer } from '@/lib/supabase'
 import { useCustomer } from '@/context/CustomerContext'
