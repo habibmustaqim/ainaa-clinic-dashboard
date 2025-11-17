@@ -997,40 +997,40 @@ const Homepage: React.FC = () => {
         to: dateRange.to ? toLocalDateString(dateRange.to) : undefined
       })
 
-      // Fetch ALL transactions with pagination
-      let allTransactions: any[] = []
+      // Fetch ALL service sales with pagination (beautician data is in service_sales table)
+      let allServiceSales: any[] = []
       let pageSize = 1000
       let page = 0
       let hasMore = true
 
       while (hasMore) {
         let query = supabase
-          .from('transactions')
-          .select('beautician_name, payment_to_date, transaction_date')
-          .not('beautician_name', 'is', null)
-          .not('payment_to_date', 'is', null)
+          .from('service_sales')
+          .select('sales_person, payment_amount, sale_date')
+          .not('sales_person', 'is', null)
+          .not('payment_amount', 'is', null)
           .range(page * pageSize, (page + 1) * pageSize - 1)
 
         // Apply date range filter
         if (dateRange.from) {
-          query = query.gte('transaction_date', toLocalDateString(dateRange.from))
+          query = query.gte('sale_date', toLocalDateString(dateRange.from))
         }
         if (dateRange.to) {
-          query = query.lte('transaction_date', toLocalDateString(dateRange.to))
+          query = query.lte('sale_date', toLocalDateString(dateRange.to))
         }
 
         const { data, error } = await query
 
         if (error) {
-          console.error('[Homepage] Error fetching transactions page:', page, error)
+          console.error('[Homepage] Error fetching service sales page:', page, error)
           break
         }
 
         if (!data || data.length === 0) {
           hasMore = false
         } else {
-          allTransactions = allTransactions.concat(data)
-          console.log(`[Homepage] Loaded ${allTransactions.length} transactions for salesperson ranking so far...`)
+          allServiceSales = allServiceSales.concat(data)
+          console.log(`[Homepage] Loaded ${allServiceSales.length} service sales for salesperson ranking so far...`)
 
           if (data.length < pageSize) {
             hasMore = false
@@ -1040,18 +1040,18 @@ const Homepage: React.FC = () => {
         }
       }
 
-      console.log('[Homepage] Salesperson Ranking total transactions loaded:', allTransactions.length)
+      console.log('[Homepage] Salesperson Ranking total service sales loaded:', allServiceSales.length)
 
-      if (allTransactions.length === 0) return
+      if (allServiceSales.length === 0) return
 
-      // Aggregate by beautician
+      // Aggregate by sales person
       const salesMap = new Map<string, { revenue: number; count: number }>()
 
-      allTransactions.forEach(t => {
-        const name = t.beautician_name
+      allServiceSales.forEach(s => {
+        const name = s.sales_person
         const current = salesMap.get(name) || { revenue: 0, count: 0 }
         salesMap.set(name, {
-          revenue: current.revenue + (t.payment_to_date || 0),
+          revenue: current.revenue + (s.payment_amount || 0),
           count: current.count + 1
         })
       })
