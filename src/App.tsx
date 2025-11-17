@@ -6,6 +6,7 @@ import Homepage from './pages/Homepage'
 import Customers from './pages/Customers'
 import CustomerDashboard from './pages/CustomerDashboard'
 import UploadPage from './pages/UploadPage'
+import Reporting from './pages/Reporting'
 import ComingSoon from './pages/ComingSoon'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
             <Route path="/customers" element={<Customers />} />
             <Route path="/customer/:customerIdentifier" element={<CustomerDashboard />} />
             <Route path="/upload" element={<UploadPage />} />
+            <Route path="/reporting" element={<Reporting />} />
 
             {/* Customer Analytics Pages - Coming Soon */}
             <Route path="/customers/profiles" element={<ComingSoon pageName="Customer Profiles" />} />

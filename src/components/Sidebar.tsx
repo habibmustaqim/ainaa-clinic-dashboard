@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Home, BarChart3, Upload } from 'lucide-react'
+import { Home, BarChart3, Upload, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavLinkProps {
@@ -62,6 +62,12 @@ export const Sidebar: React.FC = () => {
             icon={<Home size={20} />}
             label="Homepage"
             isActive={isActive('/')}
+          />
+          <NavLink
+            to="/reporting"
+            icon={<FileText size={20} />}
+            label="Reporting"
+            isActive={isActive('/reporting')}
           />
           <NavLink
             to="/upload"
