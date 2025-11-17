@@ -49,6 +49,7 @@ const navigation: NavGroup[] = [
     items: [
       { id: 'home', label: 'Dashboard', icon: Home, path: '/' },
       { id: 'customers', label: 'Customers', icon: Users, path: '/customers' },
+      { id: 'reporting', label: 'Reporting', icon: FileText, path: '/reporting' },
       { id: 'upload', label: 'Upload Data', icon: Upload, path: '/upload' },
     ]
   },
