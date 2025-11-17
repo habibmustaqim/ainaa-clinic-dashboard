@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { ColumnDef } from '@tanstack/react-table'
-import { FileDown, Filter, X } from 'lucide-react'
+import { ColumnDef, FilterFn } from '@tanstack/react-table'
+import { FileDown, X } from 'lucide-react'
 import { Layout } from '@/components/Layout'
 import { PageContainer, PageHeader } from '@/components/layout/index'
 import { BentoGrid, StatCard } from '@/components/ui/bento-card'
-import { DateRangeFilter } from '@/components/ui/DateRangeFilter'
-import { MultiSelectFilter, MultiSelectOption } from '@/components/ui/MultiSelectFilter'
-import { RangeFilter } from '@/components/ui/RangeFilter'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,13 +11,20 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { STAT_CONFIGS } from '@/config/statsConfig'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 import { exportData, ExportColumn } from '@/utils/exportUtils'
-import { DateRange, getPresetRange } from '@/utils/dateHelpers'
 import { supabase } from '@/lib/supabase'
+
+// Column Filter Components
+import { TextColumnFilter } from '@/components/ui/filters/TextColumnFilter'
+import { DateRangeColumnFilter } from '@/components/ui/filters/DateRangeColumnFilter'
+import { MultiSelectColumnFilter } from '@/components/ui/filters/MultiSelectColumnFilter'
+import { NumberRangeColumnFilter } from '@/components/ui/filters/NumberRangeColumnFilter'
 
 interface ReportRow {
   id: string
   date: string
   customerName: string
+  customerPhone: string
+  customerBirthday: string | null
   service: string
   beautician: string
   amount: number
@@ -29,60 +33,84 @@ interface ReportRow {
   discount: number
 }
 
-const Reporting: React.FC = () => {
-  // State - Filters
-  const [dateRange, setDateRange] = useState<DateRange>(getPresetRange('month'))
-  const [selectedBeauticians, setSelectedBeauticians] = useState<string[]>([])
-  const [selectedServices, setSelectedServices] = useState<string[]>([])
-  const [purchaseRange, setPurchaseRange] = useState<{ min: number | null; max: number | null }>({
-    min: null,
-    max: null,
-  })
-  const [showFilters, setShowFilters] = useState(true)
+interface MultiSelectOption {
+  value: string
+  label: string
+}
 
+const Reporting: React.FC = () => {
   // State - Data
   const [loading, setLoading] = useState(true)
-  const [rawData, setRawData] = useState<any[]>([])
+  const [rawData, setRawData] = useState<ReportRow[]>([])
   const [beauticiansOptions, setBeauticiansOptions] = useState<MultiSelectOption[]>([])
   const [servicesOptions, setServicesOptions] = useState<MultiSelectOption[]>([])
+  const [tableInstance, setTableInstance] = useState<any>(null)
 
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
       try {
-        const { data: serviceSales, error } = await supabase
-          .from('service_sales')
-          .select(`
-            id,
-            sale_date,
-            customer_id,
-            service_type,
-            service_name,
-            nett_amount,
-            payment_mode,
-            sales_person,
-            is_cancelled,
-            discount_amount,
-            customers (
-              name
-            )
-          `)
-          .order('sale_date', { ascending: false })
+        let allServiceSales: any[] = []
+        let pageSize = 1000
+        let start = 0
+        let hasMore = true
 
-        if (error) throw error
+        // Fetch all service sales using pagination (Supabase has 1000 row limit per query)
+        while (hasMore) {
+          const { data: serviceSales, error } = await supabase
+            .from('service_sales')
+            .select(`
+              id,
+              sale_date,
+              customer_id,
+              service_type,
+              service_name,
+              nett_amount,
+              payment_mode,
+              sales_person,
+              is_cancelled,
+              discount_amount,
+              customers (
+                name,
+                contact_number,
+                date_of_birth
+              )
+            `)
+            .order('sale_date', { ascending: false })
+            .range(start, start + pageSize - 1)
+
+          if (error) throw error
+
+          if (serviceSales && serviceSales.length > 0) {
+            allServiceSales = [...allServiceSales, ...serviceSales]
+            start += pageSize
+            hasMore = serviceSales.length === pageSize
+          } else {
+            hasMore = false
+          }
+        }
 
         // Process data
-        const processed = (serviceSales || []).map((sale: any) => ({
-          ...sale,
+        const processed: ReportRow[] = allServiceSales.map((sale: any) => ({
+          id: sale.id,
+          date: sale.sale_date,
           customerName: sale.customers?.name || 'Unknown',
+          customerPhone: sale.customers?.contact_number || '-',
+          customerBirthday: sale.customers?.date_of_birth || null,
+          service: sale.service_name || sale.service_type || '-',
+          beautician: sale.sales_person || '-',
+          amount: sale.nett_amount || 0,
+          paymentMethod: sale.payment_mode || '-',
+          status: sale.is_cancelled ? 'Cancelled' : 'Completed',
+          discount: sale.discount_amount || 0,
         }))
 
         setRawData(processed)
 
         // Extract unique beauticians
         const uniqueBeauticians = Array.from(
-          new Set(processed.map((s: any) => s.sales_person).filter(Boolean))
+          new Set(processed.map(s => s.beautician).filter(b => b !== '-'))
         ).sort() as string[]
         setBeauticiansOptions(
           uniqueBeauticians.map(b => ({ value: b, label: b }))
@@ -90,7 +118,7 @@ const Reporting: React.FC = () => {
 
         // Extract unique services
         const uniqueServices = Array.from(
-          new Set(processed.map((s: any) => s.service_name || s.service_type).filter(Boolean))
+          new Set(processed.map(s => s.service).filter(s => s !== '-'))
         ).sort() as string[]
         setServicesOptions(
           uniqueServices.map(s => ({ value: s, label: s }))
@@ -105,92 +133,109 @@ const Reporting: React.FC = () => {
     fetchData()
   }, [])
 
-  // Filter data
-  const filteredData = useMemo(() => {
-    return rawData.filter(row => {
-      // Date filter
-      const saleDate = new Date(row.sale_date)
-      if (dateRange.from && saleDate < dateRange.from) return false
-      if (dateRange.to && saleDate > dateRange.to) return false
-
-      // Beautician filter
-      if (selectedBeauticians.length > 0 && !selectedBeauticians.includes(row.sales_person)) {
-        return false
-      }
-
-      // Service filter
-      const service = row.service_name || row.service_type
-      if (selectedServices.length > 0 && !selectedServices.includes(service)) {
-        return false
-      }
-
-      // Purchase range filter
-      const amount = row.nett_amount || 0
-      if (purchaseRange.min !== null && amount < purchaseRange.min) return false
-      if (purchaseRange.max !== null && amount > purchaseRange.max) return false
-
+  // Custom filter functions
+  const filterFns: Record<string, FilterFn<ReportRow>> = {
+    dateBetween: (row, columnId, filterValue) => {
+      const date = new Date(row.getValue(columnId) as string)
+      const [min, max] = filterValue as [string | null, string | null]
+      if (!min && !max) return true
+      if (min && date < new Date(min)) return false
+      if (max && date > new Date(max)) return false
       return true
-    })
-  }, [rawData, dateRange, selectedBeauticians, selectedServices, purchaseRange])
-
-  // Transform to table rows
-  const tableData: ReportRow[] = useMemo(() => {
-    return filteredData.map(row => ({
-      id: row.id,
-      date: row.sale_date,
-      customerName: row.customerName,
-      service: row.service_name || row.service_type || '-',
-      beautician: row.sales_person || '-',
-      amount: row.nett_amount || 0,
-      paymentMethod: row.payment_mode || '-',
-      status: row.is_cancelled ? 'Cancelled' : 'Completed',
-      discount: row.discount_amount || 0,
-    }))
-  }, [filteredData])
-
-  // Calculate stats
-  const stats = useMemo(() => {
-    const totalRevenue = filteredData.reduce((sum, row) => sum + (row.nett_amount || 0), 0)
-    const totalTransactions = filteredData.length
-    const uniqueCustomers = new Set(filteredData.map(row => row.customer_id)).size
-    const avgTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0
-
-    return {
-      totalRevenue,
-      totalTransactions,
-      totalCustomers: uniqueCustomers,
-      avgTransaction,
+    },
+    arrIncludesSome: (row, columnId, filterValue: string[]) => {
+      if (!filterValue || filterValue.length === 0) return true
+      return filterValue.includes(row.getValue(columnId) as string)
+    },
+    inNumberRange: (row, columnId, filterValue) => {
+      const value = row.getValue(columnId) as number
+      const [min, max] = filterValue as [number | null, number | null]
+      if (min !== null && value < min) return false
+      if (max !== null && value > max) return false
+      return true
     }
-  }, [filteredData])
+  }
 
   // Table columns
-  const columns: ColumnDef<ReportRow>[] = [
+  const columns: ColumnDef<ReportRow>[] = useMemo(() => [
     {
       accessorKey: 'date',
       header: 'Date',
       cell: ({ row }) => formatDate(row.getValue('date')),
       enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'dateBetween',
+      meta: {
+        filterComponent: DateRangeColumnFilter
+      }
     },
     {
       accessorKey: 'customerName',
       header: 'Customer',
       enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'includesString',
+      meta: {
+        filterComponent: TextColumnFilter
+      }
+    },
+    {
+      accessorKey: 'customerPhone',
+      header: 'Phone',
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'includesString',
+      meta: {
+        filterComponent: TextColumnFilter
+      }
+    },
+    {
+      accessorKey: 'customerBirthday',
+      header: 'Birthday',
+      cell: ({ row }) => {
+        const birthday = row.getValue('customerBirthday') as string | null
+        return birthday ? formatDate(birthday) : '-'
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'dateBetween',
+      meta: {
+        filterComponent: DateRangeColumnFilter
+      }
     },
     {
       accessorKey: 'service',
       header: 'Service',
       enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'arrIncludesSome',
+      meta: {
+        filterComponent: MultiSelectColumnFilter,
+        filterOptions: servicesOptions
+      }
     },
     {
       accessorKey: 'beautician',
       header: 'Beautician',
       enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'arrIncludesSome',
+      meta: {
+        filterComponent: MultiSelectColumnFilter,
+        filterOptions: beauticiansOptions
+      }
     },
     {
       accessorKey: 'amount',
       header: 'Amount',
       cell: ({ row }) => formatCurrency(row.getValue('amount')),
       enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'inNumberRange',
+      meta: {
+        filterComponent: NumberRangeColumnFilter,
+        filterPrefix: 'RM'
+      }
     },
     {
       accessorKey: 'discount',
@@ -200,7 +245,7 @@ const Reporting: React.FC = () => {
     },
     {
       accessorKey: 'paymentMethod',
-      header: 'Payment Method',
+      header: 'Payment',
       enableSorting: true,
     },
     {
@@ -219,12 +264,39 @@ const Reporting: React.FC = () => {
       },
       enableSorting: true,
     },
-  ]
+  ], [beauticiansOptions, servicesOptions])
+
+  // Calculate stats from filtered data
+  const stats = useMemo(() => {
+    if (!tableInstance) {
+      return {
+        totalRevenue: 0,
+        totalTransactions: 0,
+        totalCustomers: 0,
+        avgTransaction: 0,
+      }
+    }
+
+    const filtered = tableInstance.getFilteredRowModel().rows.map((row: any) => row.original)
+    const totalRevenue = filtered.reduce((sum: number, row: ReportRow) => sum + row.amount, 0)
+    const totalTransactions = filtered.length
+    const uniqueCustomers = new Set(filtered.map((row: ReportRow) => row.customerName)).size
+    const avgTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0
+
+    return {
+      totalRevenue,
+      totalTransactions,
+      totalCustomers: uniqueCustomers,
+      avgTransaction,
+    }
+  }, [tableInstance])
 
   // Export columns
   const exportColumns: ExportColumn[] = [
     { header: 'Date', accessor: (row: ReportRow) => formatDate(row.date), width: 12 },
     { header: 'Customer', accessor: 'customerName', width: 20 },
+    { header: 'Phone', accessor: 'customerPhone', width: 15 },
+    { header: 'Birthday', accessor: (row: ReportRow) => row.customerBirthday ? formatDate(row.customerBirthday) : '-', width: 12 },
     { header: 'Service', accessor: 'service', width: 25 },
     { header: 'Beautician', accessor: 'beautician', width: 15 },
     { header: 'Amount', accessor: (row: ReportRow) => formatCurrency(row.amount), width: 12 },
@@ -238,27 +310,17 @@ const Reporting: React.FC = () => {
     const filename = `sales-report-${new Date().toISOString().split('T')[0]}`
     const title = 'Sales Report - Ainaa Clinic'
 
+    const filteredData = tableInstance
+      ? tableInstance.getFilteredRowModel().rows.map((row: any) => row.original)
+      : rawData
+
     exportData(format, {
       filename,
       title,
       columns: exportColumns,
-      data: tableData,
+      data: filteredData,
     })
   }
-
-  // Clear filters
-  const clearFilters = () => {
-    setDateRange(getPresetRange('month'))
-    setSelectedBeauticians([])
-    setSelectedServices([])
-    setPurchaseRange({ min: null, max: null })
-  }
-
-  const hasActiveFilters =
-    selectedBeauticians.length > 0 ||
-    selectedServices.length > 0 ||
-    purchaseRange.min !== null ||
-    purchaseRange.max !== null
 
   if (loading) {
     return (
@@ -312,73 +374,63 @@ const Reporting: React.FC = () => {
           />
         </BentoGrid>
 
-        {/* Filters Section */}
-        <div className="bg-card border border-border rounded-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Filter className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold">Filters</h2>
-              {hasActiveFilters && (
-                <Badge variant="secondary" className="ml-2">
-                  {[
-                    selectedBeauticians.length,
-                    selectedServices.length,
-                    purchaseRange.min !== null || purchaseRange.max !== null ? 1 : 0,
-                  ].reduce((a, b) => a + b, 0)}{' '}
-                  active
-                </Badge>
-              )}
-            </div>
-            <div className="flex gap-2">
-              {hasActiveFilters && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                  <X className="h-4 w-4 mr-2" />
-                  Clear Filters
-                </Button>
-              )}
+        {/* Filter Section */}
+        {tableInstance && (
+          <div className="bg-card border border-border rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Filters</h3>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowFilters(!showFilters)}
+                onClick={() => tableInstance.resetColumnFilters()}
+                className="h-8 text-xs"
               >
-                {showFilters ? 'Hide' : 'Show'} Filters
+                <X className="h-3.5 w-3.5 mr-1.5" />
+                Clear All Filters
               </Button>
             </div>
-          </div>
 
-          {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <DateRangeFilter value={dateRange} onChange={setDateRange} />
-              <MultiSelectFilter
-                label="Beauticians"
-                options={beauticiansOptions}
-                selected={selectedBeauticians}
-                onChange={setSelectedBeauticians}
-                placeholder="Select beauticians..."
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <DateRangeColumnFilter
+                column={tableInstance.getColumn('date')!}
+                placeholder="Visit Date"
               />
-              <MultiSelectFilter
-                label="Services"
+              <DateRangeColumnFilter
+                column={tableInstance.getColumn('customerBirthday')!}
+                placeholder="Customer Birthday"
+              />
+              <TextColumnFilter
+                column={tableInstance.getColumn('customerName')!}
+                placeholder="Customer Name"
+              />
+              <TextColumnFilter
+                column={tableInstance.getColumn('customerPhone')!}
+                placeholder="Phone Number"
+              />
+              <MultiSelectColumnFilter
+                column={tableInstance.getColumn('service')!}
                 options={servicesOptions}
-                selected={selectedServices}
-                onChange={setSelectedServices}
-                placeholder="Select services..."
+                placeholder="Service"
               />
-              <RangeFilter
-                label="Purchase Range"
-                value={purchaseRange}
-                onChange={setPurchaseRange}
-                prefix="RM"
-                placeholder={{ min: 'Min Amount', max: 'Max Amount' }}
-                step={0.01}
+              <MultiSelectColumnFilter
+                column={tableInstance.getColumn('beautician')!}
+                options={beauticiansOptions}
+                placeholder="Beautician"
+              />
+              <NumberRangeColumnFilter
+                column={tableInstance.getColumn('amount')!}
+                placeholder="Amount Range"
               />
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Export Actions */}
         <div className="flex items-center justify-between mb-4">
           <div className="text-sm text-muted-foreground">
-            {tableData.length} {tableData.length === 1 ? 'record' : 'records'} found
+            {tableInstance
+              ? `${tableInstance.getFilteredRowModel().rows.length} of ${rawData.length} records`
+              : `${rawData.length} records`}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
@@ -399,10 +451,13 @@ const Reporting: React.FC = () => {
         {/* Data Table */}
         <DataTable
           columns={columns}
-          data={tableData}
+          data={rawData}
           pageSize={20}
           pageSizeOptions={[10, 20, 50, 100]}
           emptyMessage="No data matches your filters"
+          showColumnFilters={false}
+          filterFns={filterFns}
+          onTableChange={setTableInstance}
         />
       </PageContainer>
     </Layout>

@@ -20,6 +20,7 @@ export interface DateRangeFilterProps {
   className?: string
   size?: 'sm' | 'md' | 'lg'
   variant?: 'default' | 'compact'
+  label?: string
 }
 
 export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
@@ -29,7 +30,8 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
   showCustomRange = true,
   className,
   size = 'md',
-  variant = 'default'
+  variant = 'default',
+  label
 }) => {
   const [showCustom, setShowCustom] = useState(false)
   const [customFrom, setCustomFrom] = useState(value.from ? formatDateInput(value.from) : '')
@@ -194,23 +196,30 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
     )
 
     return (
-      <div className={cn('relative', className)}>
-        <Button
-          ref={buttonRef}
-          variant="outline"
-          size="sm"
-          onClick={() => setShowCustom(!showCustom)}
-          className="text-xs md:text-sm whitespace-nowrap"
-        >
-          <Calendar className="h-3.5 w-3.5 mr-1.5" />
-          {formatDateRange(value)}
-          <svg className="ml-1.5 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </Button>
+      <div className={cn('space-y-2', className)}>
+        {label && (
+          <label className="text-xs font-medium text-foreground">
+            {label}
+          </label>
+        )}
+        <div className="relative">
+          <Button
+            ref={buttonRef}
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCustom(!showCustom)}
+            className="text-xs md:text-sm whitespace-nowrap w-full"
+          >
+            <Calendar className="h-3.5 w-3.5 mr-1.5" />
+            {formatDateRange(value)}
+            <svg className="ml-1.5 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </Button>
 
-        {/* Render dropdown via portal at document root to escape stacking contexts */}
-        {typeof document !== 'undefined' && dropdownContent && createPortal(dropdownContent, document.body)}
+          {/* Render dropdown via portal at document root to escape stacking contexts */}
+          {typeof document !== 'undefined' && dropdownContent && createPortal(dropdownContent, document.body)}
+        </div>
       </div>
     )
   }

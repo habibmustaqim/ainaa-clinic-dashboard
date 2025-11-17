@@ -9,6 +9,8 @@ import {
   SortingState,
   ColumnDef,
   PaginationState,
+  ColumnFiltersState,
+  FilterFn,
 } from '@tanstack/react-table'
 import {
   ChevronLeft,
@@ -38,6 +40,9 @@ export interface DataTableProps<TData> {
   className?: string
   emptyMessage?: string
   showPagination?: boolean
+  showColumnFilters?: boolean
+  filterFns?: Record<string, FilterFn<TData>>
+  onTableChange?: (table: any) => void
 }
 
 export function DataTable<TData>({
@@ -48,8 +53,12 @@ export function DataTable<TData>({
   className,
   emptyMessage = 'No data available',
   showPagination = true,
+  showColumnFilters = false,
+  filterFns,
+  onTableChange,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: pageSize,
@@ -61,14 +70,24 @@ export function DataTable<TData>({
     state: {
       sorting,
       pagination,
+      columnFilters,
     },
     onSortingChange: setSorting,
     onPaginationChange: setPagination,
+    onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    filterFns: filterFns as any,
   })
+
+  // Notify parent of table changes (for stats, export, etc.)
+  React.useEffect(() => {
+    if (onTableChange) {
+      onTableChange(table)
+    }
+  }, [table, onTableChange])
 
   const getSortIcon = (isSorted: false | 'asc' | 'desc') => {
     if (isSorted === 'asc') {
@@ -88,32 +107,57 @@ export function DataTable<TData>({
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead
-                      key={header.id}
-                      className={cn(
-                        'bg-muted/50 font-semibold',
-                        header.column.getCanSort() && 'cursor-pointer select-none'
-                      )}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {header.isPlaceholder ? null : (
-                        <div className="flex items-center">
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                          {header.column.getCanSort() && (
-                            <span className="ml-auto">
-                              {getSortIcon(header.column.getIsSorted())}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </TableHead>
-                  ))}
-                </TableRow>
+                <React.Fragment key={headerGroup.id}>
+                  <TableRow>
+                    {headerGroup.headers.map((header) => (
+                      <TableHead
+                        key={header.id}
+                        className={cn(
+                          'bg-muted/50 font-semibold',
+                          header.column.getCanSort() && 'cursor-pointer select-none'
+                        )}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        {header.isPlaceholder ? null : (
+                          <div className="flex items-center">
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                            {header.column.getCanSort() && (
+                              <span className="ml-auto">
+                                {getSortIcon(header.column.getIsSorted())}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                  {showColumnFilters && (
+                    <TableRow>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id} className="p-2 bg-muted/30">
+                          {header.column.getCanFilter() ? (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              {header.column.columnDef.meta?.filterComponent
+                                ? React.createElement(header.column.columnDef.meta.filterComponent as any, {
+                                    column: header.column,
+                                    ...(header.column.columnDef.meta?.filterOptions && {
+                                      options: header.column.columnDef.meta.filterOptions
+                                    }),
+                                    ...(header.column.columnDef.meta?.filterPrefix && {
+                                      prefix: header.column.columnDef.meta.filterPrefix
+                                    })
+                                  })
+                                : null}
+                            </div>
+                          ) : null}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  )}
+                </React.Fragment>
               ))}
             </TableHeader>
             <TableBody>

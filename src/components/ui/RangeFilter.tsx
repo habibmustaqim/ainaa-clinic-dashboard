@@ -43,7 +43,7 @@ export const RangeFilter: React.FC<RangeFilterProps> = ({
   return (
     <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between">
-        <label className="block text-sm font-medium text-foreground">
+        <label className="block text-xs font-medium text-foreground">
           {label}
         </label>
         {hasValue && (
