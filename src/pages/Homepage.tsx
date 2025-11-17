@@ -18,7 +18,6 @@ import { BentoGrid, StatCard, BentoCard } from '@/components/ui/bento-card'
 import { DateRangeFilter } from '@/components/ui/DateRangeFilter'
 import { PageContainer, PageHeader } from '@/components/layout/index'
 import { Layout } from '@/components/Layout'
-import { SearchInput } from '@/components/ui/SearchInput'
 import { RankedListCard, RankedItemData, SortToggle } from '@/components/ui/RankedListCard'
 import { SalespersonLeaderboard } from '@/components/SalespersonLeaderboard'
 
@@ -1110,25 +1109,6 @@ const Homepage: React.FC = () => {
             />
           }
         />
-
-        {/* Search Bar */}
-        <div className="mb-6">
-          <SearchInput
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search customers by name, membership number, or phone..."
-            results={filteredCustomers}
-            onSelectResult={handleCustomerSelect}
-            renderResult={(customer) => (
-              <div>
-                <div className="font-medium text-foreground">{customer.name}</div>
-                <div className="text-sm text-muted-foreground">
-                  {customer.membership_number} • {customer.contact_number}
-                </div>
-              </div>
-            )}
-          />
-        </div>
 
         {/* Main Statistics Grid */}
         <BentoGrid cols={4} gap="md" className="mb-6">
