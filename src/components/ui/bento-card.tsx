@@ -382,11 +382,17 @@ const CountUp: React.FC<CountUpProps> = ({ value, duration = 1.5 }) => {
 
       // Format the value
       if (isString) {
-        // Preserve the original format (e.g., "RM 1,234.56")
+        // Detect if the original value has decimals or currency symbols
         const prefix = value.toString().match(/^[^\d]*/)?.[0] || ''
+        const hasDecimalInOriginal = value.toString().includes('.')
+        const hasCurrencySymbol = /RM|MYR|\$|€|£/.test(value.toString())
+
+        // Use decimals only for currency values or values that already have decimals
+        const useDecimals = hasDecimalInOriginal || hasCurrencySymbol
+
         const formatted = new Intl.NumberFormat('en-MY', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
+          minimumFractionDigits: useDecimals ? 2 : 0,
+          maximumFractionDigits: useDecimals ? 2 : 0
         }).format(currentValue)
         setDisplayValue(prefix + formatted)
       } else {
