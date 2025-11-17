@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import type { ServiceSales } from '@/lib/supabase'
 
 /**
  * Service Sales Cleaner
@@ -202,6 +203,36 @@ function parseDate(value: any): string | null {
 }
 
 /**
+ * Parse time value from Excel
+ * Handles HH:MM:SS, HH:MM formats and Excel time serial numbers
+ */
+function parseTime(value: any): string | null {
+  if (!value) return null
+
+  try {
+    const str = cleanString(value)
+    if (!str) return null
+
+    // Handle HH:MM:SS or HH:MM format
+    if (str.match(/^\d{1,2}:\d{2}(:\d{2})?$/)) {
+      return str
+    }
+
+    // Handle Excel time serial number (fraction of a day)
+    if (typeof value === 'number') {
+      const hours = Math.floor(value * 24)
+      const minutes = Math.floor((value * 24 * 60) % 60)
+      const seconds = Math.floor((value * 24 * 60 * 60) % 60)
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    }
+
+    return null
+  } catch (e) {
+    return null
+  }
+}
+
+/**
  * Clean monetary value
  * Handles:
  * - Commas and spaces
@@ -358,15 +389,18 @@ function parseDuration(value: string | number | undefined): number | null {
  * @param raw - Raw row data from Excel
  * @param rowValues - Array of cell values (for handling duplicate column names)
  * @param transactionIdMap - Map of SO# to transaction IDs
- * @returns Cleaned enhanced item object or null if invalid
+ * @param customerIdMap - Map of membership# to customer IDs
+ * @returns Cleaned service sales object or null if invalid
  */
 export function cleanServiceSalesRow(
   raw: RawServiceSalesRow,
   rowValues: any[],
-  transactionIdMap: Map<string, string>
-): Omit<EnhancedItem, 'id' | 'created_at'> | null {
-  // Extract SO number
-  const soNumber = cleanString(raw['SO #'] || raw['Transaction'])
+  transactionIdMap: Map<string, string>,
+  customerIdMap: Map<string, string>,
+  rowIndex: number = -1
+): Omit<ServiceSales, 'id' | 'created_at' | 'updated_at'> | null {
+  // Extract SO number (check multiple column name variations)
+  const soNumber = cleanString(raw['Sales #'] || raw['SO #'] || raw['SO#'] || raw['Transaction'])
   if (!soNumber) {
     return null
   }
@@ -377,8 +411,21 @@ export function cleanServiceSalesRow(
     return null
   }
 
+  // Extract membership number
+  const membershipNumber = cleanString(raw['Membership #'] || raw['Membership Number'])
+  if (!membershipNumber) {
+    return null
+  }
+
+  // Get customer ID
+  const customerId = customerIdMap.get(membershipNumber)
+  if (!customerId) {
+    return null
+  }
+
   // Extract service name (required)
   const serviceName = cleanString(
+    raw['Services'] ||
     raw['Service Name'] ||
     raw['Service'] ||
     raw['Service Code'] ||
@@ -388,67 +435,152 @@ export function cleanServiceSalesRow(
     return null
   }
 
-  // Extract quantities and prices
+  // Extract date and time (UPDATED CODE - v2)
+  console.log('🔧 DEBUG: Using parseDate and parseTime functions')
+  const saleDate = parseDate(raw['Date'])
+  if (!saleDate) {
+    return null
+  }
+  const saleTime = parseTime(raw['Time'])
+
+  // Extract customer info
+  const customerName = cleanString(raw['Customer'])
+  const customerPhone = cleanString(raw['Customer Phone'])
+
+  // Extract transaction details
+  const invoiceNumber = cleanString(raw['Invoice #'])
+  const saleType = cleanString(raw['Type'])
+
+  // Extract service details
+  const serviceType = cleanString(raw['Services  Type'] || raw['Service Type'])
+  const sku = cleanString(raw['SKU'])
   const quantity = parseQuantity(raw['Qty'] || raw['Quantity'])
-  const unitPrice = cleanMonetaryValue(raw['Unit Price'] || raw['Price'])
-  const originalPrice = cleanMonetaryValue(raw['Original Price'] || unitPrice)
 
-  // Extract discounts
-  const discountAmount = cleanMonetaryValue(raw['Discount'])
-  const discountPercentage = parsePercentage(raw['Discount %'])
-  const discountType = cleanString(raw['Discount Type'])
-  const discountReason = cleanString(raw['Discount Reason'])
+  // Extract pricing
+  const originalRetailPrice = cleanMonetaryValue(raw['OriginalRetail Price'] || raw['Original Price'])
+  const grossAmount = cleanMonetaryValue(raw['Gross '] || raw['Gross'])
+  const voucherAmount = cleanMonetaryValue(raw['Voucher '] || raw['Voucher'])
+  const discountAmount = cleanMonetaryValue(raw['Discount'] || 0)
+  const nettBeforeDeduction = cleanMonetaryValue(raw['Nett Before Deduction'] || 0)
 
-  // Calculate subtotal
-  const subtotal = originalPrice * quantity
-
-  // Extract totals
-  const totalPrice = cleanMonetaryValue(
-    raw['Total'] ||
-    raw['Total Price'] ||
-    raw['Net Total'] ||
-    (subtotal - discountAmount)
-  )
+  // Extract promotions
+  const promo = cleanString(raw['Promo'])
+  const promoGroup = cleanString(raw['Promo  Group'] || raw['Promo Group'])
 
   // Extract tax
-  const taxAmount = cleanMonetaryValue(raw['Tax'] || raw['Tax Amount'])
-  const taxRate = parseTaxRate(raw['Tax Rate'] || raw['Tax %'])
+  const taxName = cleanString(raw['Tax  Name'] || raw['Tax Name'])
+  const taxRate = parseTaxRate(raw['Tax  Rate (%)'] || raw['Tax Rate'])
+  const taxAmount = cleanMonetaryValue(raw['Tax  Amount '] || raw['Tax Amount'])
+
+  // Extract Cash Wallet amounts
+  const cwUsedGross = cleanMonetaryValue(raw['CW Used(Gross)'] || 0)
+  const cwUsedTax = cleanMonetaryValue(raw['CW Used(Tax)'] || 0)
+  const cwCancelledGross = cleanMonetaryValue(raw['CW Cancelled(Gross)'] || 0)
+  const cwCancelledTax = cleanMonetaryValue(raw['CW Cancelled(Tax)'] || 0)
+
+  // Extract cancellation info
+  const cancelledGross = cleanMonetaryValue(raw['Cancelled(Gross)'] || 0)
+  const cancelledTax = cleanMonetaryValue(raw['Cancelled(Tax)'] || 0)
+  const isCancelled = cancelledGross > 0 || cancelledTax > 0
+
+  // Extract payment info - handle trailing spaces
+  // Debug: Log available keys on first row to diagnose column name issue
+  if (rowIndex === 0) {
+    console.log('🔍 [Service Sales] Available column headers:', Object.keys(raw).filter(k => k.toLowerCase().includes('pay')))
+    console.log('🔍 [Service Sales] Sample Payment values:', {
+      'Payment ': raw['Payment '],
+      'Payment': raw['Payment'],
+      'Payment Amount': raw['Payment Amount'],
+      ' Payment': raw[' Payment']
+    })
+  }
+
+  const paymentAmount = cleanMonetaryValue(
+    raw['Payment Details'] ||    // Split header format (row 17)
+    raw['Payment '] ||           // With trailing space (common in exports)
+    raw['Payment'] ||            // Without space
+    raw['Payment Amount'] ||     // Alternative name
+    raw[' Payment'] ||           // Leading space
+    0
+  )
+  const paymentOutstanding = cleanMonetaryValue(
+    raw['Outstanding'] ||
+    raw['Outstanding '] ||       // With trailing space
+    raw['Payment Outstanding'] ||
+    0
+  )
+  const paymentMode = cleanString(raw['Payment Mode'])
+  const paymentType = cleanString(raw['Payment Type'])
+  const approvalCode = cleanString(raw['Approval Code'])
+  const bank = cleanString(raw['Bank'])
+
+  // Calculate nett amount
+  const nettAmount = cleanMonetaryValue(raw['Nett'] || raw['Nett Amount'] || (grossAmount - discountAmount))
+
+  // Extract staff info - handle trailing/leading spaces in column names
+  const salesPerson = cleanString(
+    raw['Sales Person '] ||      // With trailing space (common in exports)
+    raw['Sales Person'] ||       // Without space
+    raw[' Sales Person'] ||      // With leading space
+    raw[' Sales Person '] ||     // Both spaces
+    raw['Staff'] ||              // Alternative column name
+    raw['Salesperson']           // Another variant
+  )
+  const processedBy = cleanString(
+    raw['Processed By'] ||
+    raw['Processed By '] ||      // With trailing space
+    raw['ProcessedBy']
+  )
 
   // Extract service-specific fields
-  const serviceCode = cleanString(raw['Service Code'])
-  const packageName = cleanString(raw['Package'])
   const therapist = cleanString(raw['Therapist'])
-  const room = cleanString(raw['Room'])
-  const duration = parseDuration(raw['Duration'])
-
-  // Extract additional metadata
-  const staff = cleanString(raw['Staff'])
-  const category = cleanString(raw['Service Category'] || raw['Service Type'])
-  const remarks = cleanString(raw['Remarks'] || raw['Notes'])
+  const roomNumber = cleanString(raw['Room'])
+  const durationMinutes = parseDuration(raw['Duration'])
 
   return {
     transaction_id: transactionId,
-    item_name: serviceName,
-    item_type: 'service',
-    category: category || null,
+    customer_id: customerId,
+    membership_number: membershipNumber,
+    sales_number: soNumber,
+    invoice_number: invoiceNumber || null,
+    sale_date: saleDate,
+    sale_time: saleTime,
+    sale_type: saleType || null,
+    customer_name: customerName || null,
+    customer_phone: customerPhone || null,
+    service_type: serviceType || null,
+    sku: sku || null,
+    service_name: serviceName,
     quantity,
-    unit_price: unitPrice,
-    original_price: originalPrice,
+    original_retail_price: originalRetailPrice,
+    gross_amount: grossAmount,
+    voucher_amount: voucherAmount,
     discount_amount: discountAmount,
-    discount_percentage: discountPercentage,
-    discount_type: discountType || null,
-    discount_reason: discountReason || null,
-    subtotal,
-    total_price: totalPrice,
-    tax_amount: taxAmount,
+    nett_before_deduction: nettBeforeDeduction,
+    promo: promo || null,
+    promo_group: promoGroup || null,
+    tax_name: taxName || null,
     tax_rate: taxRate,
-    service_code: serviceCode || null,
-    package_name: packageName || null,
+    tax_amount: taxAmount,
+    cw_used_gross: cwUsedGross,
+    cw_used_tax: cwUsedTax,
+    cw_cancelled_gross: cwCancelledGross,
+    cw_cancelled_tax: cwCancelledTax,
+    cancelled_gross: cancelledGross,
+    cancelled_tax: cancelledTax,
+    is_cancelled: isCancelled,
+    payment_amount: paymentAmount,
+    payment_outstanding: paymentOutstanding,
+    payment_mode: paymentMode || null,
+    payment_type: paymentType || null,
+    approval_code: approvalCode || null,
+    bank: bank || null,
+    nett_amount: nettAmount,
+    sales_person: salesPerson || null,
+    processed_by: processedBy || null,
     therapist: therapist || null,
-    room: room || null,
-    duration,
-    staff: staff || null,
-    remarks: remarks || null
+    room_number: roomNumber || null,
+    duration_minutes: durationMinutes
   }
 }
 
@@ -457,17 +589,20 @@ export function cleanServiceSalesRow(
  *
  * @param rawData - Array of raw rows from Excel
  * @param transactionIdMap - Map of SO# to transaction IDs
- * @returns Array of cleaned enhanced items
+ * @param customerIdMap - Map of membership# to customer IDs
+ * @returns Array of cleaned service sales
  */
 export function cleanServiceSalesData(
   rawData: RawServiceSalesRow[],
-  transactionIdMap: Map<string, string>
-): Omit<EnhancedItem, 'id' | 'created_at'>[] {
+  transactionIdMap: Map<string, string>,
+  customerIdMap: Map<string, string>
+): Omit<ServiceSales, 'id' | 'created_at' | 'updated_at'>[] {
   console.log('🧹 Starting Service Sales data cleaning...')
   console.log(`📊 Input: ${rawData.length} raw rows`)
   console.log(`🗺️  Transaction map size: ${transactionIdMap.size}`)
+  console.log(`🗺️  Customer map size: ${customerIdMap.size}`)
 
-  const cleanedItems: Omit<EnhancedItem, 'id' | 'created_at'>[] = []
+  const cleanedItems: Omit<ServiceSales, 'id' | 'created_at' | 'updated_at'>[] = []
 
   // Rejection tracking
   let rejectedNoSO = 0
@@ -497,13 +632,20 @@ export function cleanServiceSalesData(
   for (let i = 0; i < rawData.length; i++) {
     const row = rawData[i]
 
+    // Filter out empty rows (where all values are null/empty)
+    const values = Object.values(row)
+    const hasData = values.some(val => val != null && val !== '')
+    if (!hasData) {
+      continue // Skip completely empty rows
+    }
+
     // Log progress every 100 rows
     if (i > 0 && i % 100 === 0) {
       console.log(`⏳ Progress: ${i}/${rawData.length} rows processed...`)
     }
 
-    // Extract SO number
-    const soNumber = cleanString(row['SO #'] || row['Transaction'])
+    // Extract SO number (check multiple column name variations)
+    const soNumber = cleanString(row['Sales #'] || row['SO #'] || row['SO#'] || row['Transaction'])
     if (!soNumber) {
       rejectedNoSO++
       continue
@@ -521,6 +663,7 @@ export function cleanServiceSalesData(
 
     // Check service name exists
     const serviceName = cleanString(
+      row['Services'] ||
       row['Service Name'] ||
       row['Service'] ||
       row['Service Code'] ||
@@ -535,9 +678,11 @@ export function cleanServiceSalesData(
     // For now, we'll use the row object directly
     const rowValues: any[] = Object.values(row)
 
-    const cleaned = cleanServiceSalesRow(row, rowValues, transactionIdMap)
+    const cleaned = cleanServiceSalesRow(row, rowValues, transactionIdMap, customerIdMap, i)
     if (cleaned) {
       cleanedItems.push(cleaned)
+    } else {
+      // Track rejection reasons (already tracked above in inline checks)
     }
   }
 
@@ -582,13 +727,37 @@ export async function parseServiceSalesFile(file: File): Promise<RawServiceSales
         const worksheet = workbook.Sheets[firstSheetName]
 
         console.log(`📄 Reading sheet: "${firstSheetName}"`)
-        console.log(`⏭️  Skipping first 15 rows (header at row 16)`)
+        console.log(`⏭️  Skipping first 15 rows (headers at rows 16-17, data starts at row 18)`)
 
-        // Convert to JSON with skipRows: 15
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-          range: 15, // Skip first 15 rows (0-indexed)
-          defval: '', // Default value for empty cells
-          raw: false // Return formatted strings instead of raw values
+        // Get raw data as array (header: 1 means return arrays, not objects)
+        const rawArrayData = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1, // Return array of arrays
+          raw: false, // Return formatted strings
+          defval: '' // Default for empty cells
+        }) as any[][]
+
+        // Extract headers from rows 16 and 17 (indices 15 and 16)
+        const headerRow16 = rawArrayData[15] || []
+        const headerRow17 = rawArrayData[16] || []
+
+        // Merge headers: use row 16 if not empty, otherwise use row 17
+        const mergedHeaders = headerRow16.map((val, idx) => {
+          const h16 = String(val || '').trim()
+          const h17 = String(headerRow17[idx] || '').trim()
+          return h16 || h17 || `Column_${idx + 1}`
+        })
+
+        console.log(`🔍 Merged headers from rows 16-17: ${mergedHeaders.length} columns`)
+        console.log(`   First 20 headers:`, mergedHeaders.slice(0, 20))
+        console.log(`   Headers 21-37:`, mergedHeaders.slice(20))
+
+        // Convert data rows (starting from row 18, index 17) to objects
+        const jsonData = rawArrayData.slice(17).map(row => {
+          const obj: any = {}
+          mergedHeaders.forEach((header, idx) => {
+            obj[header] = row[idx] !== undefined ? String(row[idx]) : ''
+          })
+          return obj
         })
 
         console.log(`✅ Parsed ${jsonData.length} service sales rows from "${file.name}"`)

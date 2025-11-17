@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS customer_visit_frequency (
   customer_lifetime_days INTEGER GENERATED ALWAYS AS (
     CASE
       WHEN last_visit_date IS NOT NULL AND first_visit_date IS NOT NULL
-      THEN EXTRACT(DAY FROM (last_visit_date - first_visit_date))::INTEGER
+      THEN (last_visit_date - first_visit_date)::INTEGER
       ELSE 0
     END
   ) STORED,
@@ -61,31 +61,11 @@ CREATE TABLE IF NOT EXISTS customer_visit_frequency (
     END
   ) STORED,
 
-  -- Segmentation helpers
-  is_active BOOLEAN GENERATED ALWAYS AS (
-    CASE
-      WHEN last_visit_date IS NOT NULL
-      THEN (CURRENT_DATE - last_visit_date) <= 180
-      ELSE false
-    END
-  ) STORED,
-
+  -- Segmentation helpers (calculate in application or via triggers)
+  is_active BOOLEAN DEFAULT false,
   is_vip BOOLEAN DEFAULT false,
-  is_at_risk BOOLEAN GENERATED ALWAYS AS (
-    CASE
-      WHEN last_visit_date IS NOT NULL
-      THEN (CURRENT_DATE - last_visit_date) BETWEEN 91 AND 180
-      ELSE false
-    END
-  ) STORED,
-
-  is_dormant BOOLEAN GENERATED ALWAYS AS (
-    CASE
-      WHEN last_visit_date IS NOT NULL
-      THEN (CURRENT_DATE - last_visit_date) > 180
-      ELSE false
-    END
-  ) STORED,
+  is_at_risk BOOLEAN DEFAULT false,
+  is_dormant BOOLEAN DEFAULT false,
 
   -- Timestamps
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

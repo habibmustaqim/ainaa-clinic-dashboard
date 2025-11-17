@@ -5,11 +5,11 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Customer } from '@/lib/supabase'
 
-interface PatientHeaderProps {
+interface CustomerHeaderProps {
   customer: Customer
 }
 
-const PatientHeader: React.FC<PatientHeaderProps> = ({ customer }) => {
+const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -45,8 +45,8 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ customer }) => {
       <CardContent className="pt-6">
         <div className="flex items-start gap-6">
           {/* Avatar */}
-          <Avatar className="h-24 w-24 border-4 border-white shadow-lg">
-            <AvatarFallback className="text-3xl bg-gradient-to-br from-purple-600 to-pink-600 text-white font-bold">
+          <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
+            <AvatarFallback className="text-3xl bg-primary dark:bg-primary/30 text-primary-foreground font-bold">
               {getInitials(customer.name)}
             </AvatarFallback>
           </Avatar>
@@ -55,7 +55,7 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ customer }) => {
           <div className="flex-1">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                <h1 className="text-3xl font-bold text-foreground mb-2">
                   {customer.name}
                 </h1>
                 <div className="flex items-center gap-3">
@@ -70,8 +70,8 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ customer }) => {
               </div>
               {customer.registration_date && (
                 <div className="text-right">
-                  <div className="text-sm text-gray-500">Registered</div>
-                  <div className="text-sm font-medium text-gray-700">
+                  <div className="text-sm text-muted-foreground">Registered</div>
+                  <div className="text-sm font-medium text-foreground">
                     {formatDate(customer.registration_date)}
                   </div>
                 </div>
@@ -81,52 +81,52 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ customer }) => {
             {/* Contact Information Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {/* Phone */}
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
-                  <Phone className="h-5 w-5 text-purple-600" />
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Phone className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">Phone</div>
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-xs text-muted-foreground mb-1">Phone</div>
+                  <div className="text-sm font-medium text-foreground">
                     {customer.contact_number || 'N/A'}
                   </div>
                 </div>
               </div>
 
               {/* Email */}
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="h-10 w-10 rounded-full bg-pink-100 flex items-center justify-center">
-                  <Mail className="h-5 w-5 text-pink-600" />
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="h-10 w-10 rounded-full bg-primary/15 flex items-center justify-center">
+                  <Mail className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">Email</div>
-                  <div className="text-sm font-medium text-gray-900 truncate max-w-[150px]">
+                  <div className="text-xs text-muted-foreground mb-1">Email</div>
+                  <div className="text-sm font-medium text-foreground truncate max-w-[150px]">
                     {customer.email || 'N/A'}
                   </div>
                 </div>
               </div>
 
               {/* Date of Birth */}
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-blue-600" />
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">Date of Birth</div>
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-xs text-muted-foreground mb-1">Date of Birth</div>
+                  <div className="text-sm font-medium text-foreground">
                     {formatDate(customer.date_of_birth)}
                   </div>
                 </div>
               </div>
 
               {/* Location */}
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                  <MapPin className="h-5 w-5 text-green-600" />
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="h-10 w-10 rounded-full bg-success/10 dark:bg-success/20 flex items-center justify-center">
+                  <MapPin className="h-5 w-5 text-success" />
                 </div>
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">Location</div>
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-xs text-muted-foreground mb-1">Location</div>
+                  <div className="text-sm font-medium text-foreground">
                     {customer.city && customer.state
                       ? `${customer.city}, ${customer.state}`
                       : customer.city || customer.state || 'N/A'}
@@ -141,14 +141,14 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ customer }) => {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   {customer.address && (
                     <div>
-                      <span className="text-gray-500">Address: </span>
-                      <span className="text-gray-900">{customer.address}</span>
+                      <span className="text-muted-foreground">Address: </span>
+                      <span className="text-foreground">{customer.address}</span>
                     </div>
                   )}
                   {customer.country && (
                     <div>
-                      <span className="text-gray-500">Country: </span>
-                      <span className="text-gray-900">{customer.country}</span>
+                      <span className="text-muted-foreground">Country: </span>
+                      <span className="text-foreground">{customer.country}</span>
                     </div>
                   )}
                 </div>
@@ -161,4 +161,4 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ customer }) => {
   )
 }
 
-export default PatientHeader
+export default CustomerHeader

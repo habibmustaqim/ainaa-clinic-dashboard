@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
-import { Upload, Download, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { Upload, Download, CheckCircle2, AlertCircle, Loader2, Database } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { PageContainer } from '@/components/layout/PageContainer'
+import { PageHeader } from '@/components/layout/PageHeader'
 import {
   processAndUploadData,
   startLogCapture,
@@ -36,25 +38,25 @@ const FileInput: React.FC<FileInputProps> = ({
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-slate-700">
+      <label className="block text-sm font-medium text-foreground/80">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      <p className="text-xs text-slate-500">{description}</p>
+      <p className="text-xs text-muted-foreground">{description}</p>
       <div className="relative">
         <input
           type="file"
           accept={accept}
           onChange={handleFileChange}
-          className="block w-full text-sm text-slate-500
+          className="block w-full text-sm text-muted-foreground
             file:mr-4 file:py-2 file:px-4
             file:rounded-lg file:border-0
             file:text-sm file:font-semibold
-            file:bg-blue-50 file:text-blue-700
-            hover:file:bg-blue-100
+            file:bg-primary/10 dark:file:bg-primary file:text-primary dark:file:text-primary-foreground
+            hover:file:bg-primary/20 dark:hover:file:bg-primary/80
             file:cursor-pointer cursor-pointer
-            border border-slate-200 rounded-lg
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            border border-border rounded-lg bg-input
+            focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
         />
       </div>
       {file && (
@@ -70,12 +72,14 @@ const FileInput: React.FC<FileInputProps> = ({
 export const DataUpload: React.FC = () => {
   const [files, setFiles] = useState<{
     customerInfo: File | null
+    visitFrequency: File | null
     salesDetailed: File | null
     payment: File | null
     itemSales: File | null
     serviceSales: File | null
   }>({
     customerInfo: null,
+    visitFrequency: null,
     salesDetailed: null,
     payment: null,
     itemSales: null,
@@ -108,6 +112,7 @@ export const DataUpload: React.FC = () => {
     try {
       const uploadFiles: UploadFiles = {
         customerInfo: files.customerInfo!,
+        visitFrequency: files.visitFrequency!,
         salesDetailed: files.salesDetailed!,
         payment: files.payment!,
         itemSales: files.itemSales!,
@@ -138,6 +143,7 @@ export const DataUpload: React.FC = () => {
   const handleReset = () => {
     setFiles({
       customerInfo: null,
+      visitFrequency: null,
       salesDetailed: null,
       payment: null,
       itemSales: null,
@@ -148,21 +154,23 @@ export const DataUpload: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-slate-900">Data Upload</h1>
-        <p className="text-slate-600">
-          Upload your clinic data files. All 5 files are required for processing.
-        </p>
-      </div>
+    <PageContainer maxWidth="narrow">
+      <PageHeader
+        title="Data Upload"
+        subtitle="Upload your clinic data files. All 6 files are required for processing."
+        icon={Database}
+        iconVariant="gradient"
+        iconColor="primary"
+        size="lg"
+        animation="fade-in"
+      />
 
       {/* File Upload Card */}
       <Card className="p-6">
         <div className="space-y-6">
           <div className="space-y-1">
-            <h2 className="text-xl font-semibold text-slate-900">Upload Files</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-xl font-semibold text-foreground">Upload Files</h2>
+            <p className="text-sm text-muted-foreground">
               Select all required files to begin the upload process
             </p>
           </div>
@@ -175,6 +183,14 @@ export const DataUpload: React.FC = () => {
               accept=".csv"
               file={files.customerInfo}
               onChange={(file) => setFiles({ ...files, customerInfo: file })}
+            />
+
+            <FileInput
+              label="Customer Visit Frequency CSV"
+              description="Aggregated customer visit and spending metrics"
+              accept=".csv"
+              file={files.visitFrequency}
+              onChange={(file) => setFiles({ ...files, visitFrequency: file })}
             />
 
             <FileInput
@@ -257,20 +273,24 @@ export const DataUpload: React.FC = () => {
         <Card className="p-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900">{progress.step}</h3>
-              <span className="text-sm font-medium text-slate-600">
+              <h3 className="text-lg font-semibold text-foreground">{progress.step}</h3>
+              <span className="text-sm font-medium text-foreground/70">
                 {progress.percentage}%
               </span>
             </div>
 
             <Progress value={progress.percentage} className="h-3" />
 
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <Loader2 className="animate-spin" size={16} />
+            <div className="flex items-center gap-2 text-sm text-foreground/70">
+              {progress.percentage === 100 ? (
+                <CheckCircle2 className="text-success" size={16} />
+              ) : (
+                <Loader2 className="animate-spin" size={16} />
+              )}
               <span>{progress.message}</span>
             </div>
 
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-muted-foreground">
               Progress: {progress.current} / {progress.total}
             </div>
           </div>
@@ -348,6 +368,6 @@ export const DataUpload: React.FC = () => {
           </div>
         </Card>
       )}
-    </div>
+    </PageContainer>
   )
 }

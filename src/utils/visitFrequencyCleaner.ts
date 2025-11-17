@@ -203,14 +203,6 @@ export function cleanVisitFrequencyRow(
   const lastVisitTime = parseTime(raw['Last Visit Time (Completed Appointments)'])
   const firstVisitDate = parseDate(raw['Created Date'])
 
-  // Calculate customer lifetime days
-  let customerLifetimeDays = 0
-  if (firstVisitDate && lastVisitDate) {
-    const first = new Date(firstVisitDate)
-    const last = new Date(lastVisitDate)
-    customerLifetimeDays = Math.floor((last.getTime() - first.getTime()) / (1000 * 60 * 60 * 24))
-  }
-
   // Parse financial metrics
   const totalSpent = cleanMonetaryValue(raw['Total Spent'])
   const spentForPeriod = cleanMonetaryValue(raw['Spent for Period'])
@@ -220,9 +212,6 @@ export function cleanVisitFrequencyRow(
   const avgVisitWeek = parseNumeric(raw['Average Visit/week'])
   const avgVisitMonth = parseNumeric(raw['Average Visit/month'])
   const avgVisitYear = parseNumeric(raw['Average Visit/year'])
-
-  // Calculate average transaction value
-  const averageTransactionValue = totalVisits > 0 ? totalSpent / totalVisits : 0
 
   // Parse monthly visit breakdown
   const visitsOct2025 = parseInteger(raw['Total Visits (October 2025)'])
@@ -285,10 +274,8 @@ export function cleanVisitFrequencyRow(
     visits_dec_2024: visitsDec2024,
     visits_nov_2024: visitsNov2024,
 
-    // Derived metrics
+    // Derived metrics (database will auto-generate customer_lifetime_days and average_transaction_value)
     first_visit_date: firstVisitDate,
-    customer_lifetime_days: customerLifetimeDays,
-    average_transaction_value: averageTransactionValue,
 
     // Segmentation
     is_active: isActive,

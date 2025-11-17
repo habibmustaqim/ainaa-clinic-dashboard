@@ -20,9 +20,12 @@ export const CustomerProvider: React.FC<CustomerProviderProps> = ({ children }) 
   const navigate = useNavigate()
 
   const selectCustomer = (customer: Customer) => {
-    console.log('[CustomerContext] Selecting customer:', customer.id, customer.name)
+    console.log('[CustomerContext] Selecting customer:', customer.id, customer.name, 'Membership:', customer.membership_number)
     setSelectedCustomer(customer)
-    navigate(`/patient/${customer.id}`)
+    // Use membership number if available, otherwise use prefixed ID
+    const identifier = customer.membership_number || `id-${customer.id}`
+    console.log('[CustomerContext] Using identifier:', identifier)
+    navigate(`/customer/${identifier}`)
   }
 
   const clearCustomer = () => {

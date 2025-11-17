@@ -135,7 +135,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
               <div key={transaction.id} className="border rounded-lg overflow-hidden">
                 {/* Transaction Summary Row */}
                 <div
-                  className="p-4 bg-white hover:bg-gray-50 cursor-pointer flex items-center justify-between"
+                  className="p-4 bg-card hover:bg-accent/50 cursor-pointer flex items-center justify-between"
                   onClick={() => handleToggleExpand(transaction.id)}
                 >
                   <div className="flex-1 grid grid-cols-6 gap-4 items-center">
@@ -170,7 +170,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
                 {/* Expanded Details */}
                 {expandedTransaction === transaction.id && (
-                  <div className="border-t bg-gray-50 p-4">
+                  <div className="border-t bg-muted/50 p-4">
                     {loadingItems[transaction.id] ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
@@ -189,7 +189,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
                         <TabsContent value="items" className="mt-4">
                           {transactionItems[transaction.id]?.length > 0 ? (
-                            <div className="rounded-md border bg-white">
+                            <div className="rounded-md border bg-card">
                               <Table>
                                 <TableHeader>
                                   <TableRow>
@@ -218,7 +218,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                               </Table>
                             </div>
                           ) : (
-                            <div className="text-center py-8 text-gray-500 bg-white rounded-md border">
+                            <div className="text-center py-8 text-muted-foreground bg-card rounded-md border">
                               No items found for this transaction
                             </div>
                           )}
@@ -228,7 +228,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                           {enhancedItems[transaction.id]?.length > 0 ? (
                             <div className="space-y-4">
                               {enhancedItems[transaction.id].map((item) => (
-                                <div key={item.id} className="bg-white rounded-md border p-4">
+                                <div key={item.id} className="bg-card rounded-md border p-4">
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
                                       <div className="text-sm font-medium text-gray-500">Service Type</div>
@@ -255,7 +255,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                               ))}
                             </div>
                           ) : (
-                            <div className="text-center py-8 text-gray-500 bg-white rounded-md border">
+                            <div className="text-center py-8 text-muted-foreground bg-card rounded-md border">
                               No service details available
                             </div>
                           )}

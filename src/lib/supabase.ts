@@ -88,6 +88,7 @@ export interface Transaction {
   total_discount: number
   tax_amount: number
   net_amount: number
+  payment_to_date: number
   outstanding_amount: number
   is_cancelled: boolean
   created_at: string
@@ -111,6 +112,7 @@ export interface Item {
   unit_price: number
   total_price: number
   category: string | null
+  sale_date: string | null
   created_at: string
 }
 

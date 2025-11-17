@@ -76,9 +76,9 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ stats, loading = false 
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Total Visits */}
-        <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg">
+        <div className="p-4 bg-muted dark:bg-card rounded-lg">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
+            <div className="h-12 w-12 rounded-full bg-primary dark:bg-primary flex items-center justify-center">
               <Calendar className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -89,9 +89,9 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ stats, loading = false 
         </div>
 
         {/* Last Visit */}
-        <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg">
+        <div className="p-4 bg-muted dark:bg-card rounded-lg">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center">
+            <div className="h-12 w-12 rounded-full bg-primary dark:bg-primary flex items-center justify-center">
               <Clock className="h-6 w-6 text-white" />
             </div>
             <div className="flex-1">
@@ -109,9 +109,9 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ stats, loading = false 
         </div>
 
         {/* Average Visits */}
-        <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg">
+        <div className="p-4 bg-muted dark:bg-card rounded-lg">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-green-600 to-emerald-600 flex items-center justify-center">
+            <div className="h-12 w-12 rounded-full bg-primary dark:bg-primary flex items-center justify-center">
               <TrendingUp className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -134,7 +134,7 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ stats, loading = false 
                   <div className="flex items-center gap-2">
                     <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-purple-600 to-pink-600"
+                        className="h-full bg-primary dark:bg-primary"
                         style={{
                           width: `${Math.min((item.count / Math.max(...stats.monthlyVisits!.map(m => m.count))) * 100, 100)}%`
                         }}

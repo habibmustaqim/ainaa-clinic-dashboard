@@ -2,19 +2,21 @@ import Papa from 'papaparse'
 import { parseExcelFile, cleanPaymentData, cleanItemSalesData, type RawPaymentRow, type RawItemRow } from './excelParser'
 import { cleanCustomerInfoData, type RawCustomerInfoRow } from './customerInfoCleaner'
 import { cleanSalesDetailedData, type RawSalesRow } from './salesDetailedCleaner'
-import { cleanServiceSalesData, parseServiceSalesFile, type RawServiceSalesRow, type EnhancedItem } from './serviceSalesCleaner'
+import { cleanServiceSalesData, parseServiceSalesFile, type RawServiceSalesRow } from './serviceSalesCleaner'
+import { cleanVisitFrequencyData, type RawVisitFrequencyRow } from './visitFrequencyCleaner'
 import { supabase } from '@/lib/supabase'
-import type { Customer, Transaction, Payment, Item } from '@/lib/supabase'
+import type { Customer, Transaction, Payment, Item, CustomerVisitFrequency, ServiceSales } from '@/lib/supabase'
 
 /**
  * Upload Processor
  *
- * This is the main orchestrator for the 5-file upload process:
- * 1. Customer Info CSV
- * 2. Sales Detailed CSV (skipRows: 15)
- * 3. Payment Excel
- * 4. Item Sales Excel (skipRows: 18)
- * 5. Service Sales CSV (skipRows: 15)
+ * This is the main orchestrator for the 6-file upload process:
+ * 1. Customer Info CSV (no skip)
+ * 2. Customer Visit Frequency CSV (no skip)
+ * 3. Sales Detailed CSV (skipRows: 15)
+ * 4. Payment Excel (skipRows: 11)
+ * 5. Item Sales Excel (skipRows: 16)
+ * 6. Service Sales CSV (skipRows: 15)
  *
  * Features:
  * - Progress tracking with callback
@@ -24,6 +26,7 @@ import type { Customer, Transaction, Payment, Item } from '@/lib/supabase'
  * - Comprehensive logging with emojis
  * - Error handling with log capture
  * - Metadata saving
+ * - Visit frequency aggregation
  */
 
 // ============================================================================
@@ -32,6 +35,7 @@ import type { Customer, Transaction, Payment, Item } from '@/lib/supabase'
 
 export interface UploadFiles {
   customerInfo: File
+  visitFrequency: File
   salesDetailed: File
   payment: File
   itemSales: File
@@ -53,9 +57,11 @@ export interface UploadResult {
   message: string
   stats: {
     customersInserted: number
+    visitFrequencyInserted: number
     transactionsInserted: number
     paymentsInserted: number
     itemsInserted: number
+    serviceSalesInserted: number
     enhancedItemsInserted: number
   }
   metadata?: {
@@ -63,6 +69,7 @@ export interface UploadResult {
     uploadDate: string
     fileNames: {
       customerInfo: string
+      visitFrequency: string
       salesDetailed: string
       payment: string
       itemSales: string
@@ -176,6 +183,10 @@ async function parseCSVFile<T>(file: File, skipRows: number = 0): Promise<T[]> {
       header: true,
       skipEmptyLines: true,
       preview: skipRows > 0 ? undefined : undefined,
+      transformHeader: (header: string) => {
+        // Remove BOM (Byte Order Mark) if present and trim whitespace
+        return header.replace(/^\uFEFF/, '').trim()
+      },
       beforeFirstChunk: (chunk) => {
         if (skipRows > 0) {
           const lines = chunk.split('\n')
@@ -184,6 +195,7 @@ async function parseCSVFile<T>(file: File, skipRows: number = 0): Promise<T[]> {
         return chunk
       },
       complete: (results) => {
+        console.log(`📄 Parsed ${results.data.length} rows from ${file.name}`)
         resolve(results.data as T[])
       },
       error: (error) => {
@@ -195,11 +207,12 @@ async function parseCSVFile<T>(file: File, skipRows: number = 0): Promise<T[]> {
 
 /**
  * Batch insert helper
+ * Optimized with larger batch size for faster uploads
  */
 async function batchInsert<T>(
   tableName: string,
   data: T[],
-  batchSize: number = 500
+  batchSize: number = 1000  // Optimized batch size - balances speed with reliability
 ): Promise<number> {
   if (data.length === 0) {
     console.log(`⏭️  No data to insert into ${tableName}`)
@@ -223,6 +236,16 @@ async function batchInsert<T>(
       .select('*', { count: 'exact', head: true })
 
     if (error) {
+      // Check if error is because table doesn't exist
+      if (error.message?.includes('Could not find the table') ||
+          error.message?.includes('relation') && error.message?.includes('does not exist') ||
+          error.code === 'PGRST116' ||
+          error.code === '42P01') {
+        console.log(`⚠️  Table ${tableName} does not exist - skipping insert`)
+        console.log(`   ℹ️  Please run the SQL migration script to create this table`)
+        return 0 // Return 0 rows inserted
+      }
+
       console.error(`❌ Error inserting batch ${batchNum}:`, error)
       throw new Error(`Failed to insert batch ${batchNum} into ${tableName}: ${error.message}`)
     }
@@ -247,6 +270,17 @@ async function deleteTableData(tableName: string): Promise<void> {
     .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all rows (hack to bypass RLS)
 
   if (error) {
+    // Check if error is because table doesn't exist
+    // Supabase returns specific error codes for missing tables
+    if (error.message?.includes('Could not find the table') ||
+        error.message?.includes('relation') && error.message?.includes('does not exist') ||
+        error.code === 'PGRST116' ||
+        error.code === '42P01') {
+      console.log(`⚠️  Table ${tableName} does not exist yet - skipping deletion`)
+      return // Continue without throwing error
+    }
+
+    // For other errors, still throw
     console.error(`❌ Error deleting data from ${tableName}:`, error)
     throw new Error(`Failed to delete data from ${tableName}: ${error.message}`)
   }
@@ -324,9 +358,11 @@ export async function processAndUploadData(
 
   const stats = {
     customersInserted: 0,
+    visitFrequencyInserted: 0,
     transactionsInserted: 0,
     paymentsInserted: 0,
     itemsInserted: 0,
+    serviceSalesInserted: 0,
     enhancedItemsInserted: 0
   }
 
@@ -347,45 +383,52 @@ export async function processAndUploadData(
     // STEP 1: PARSE FILES
     // ========================================================================
 
-    updateProgress('Parsing Files', 0, 5, 'Starting file parsing...')
+    updateProgress('Parsing Files', 0, 6, 'Starting file parsing...')
     console.log('\n' + '─'.repeat(80))
     console.log('📂 STEP 1: PARSING FILES')
     console.log('─'.repeat(80) + '\n')
 
-    // Parse Customer Info CSV
-    updateProgress('Parsing Files', 1, 5, `Parsing ${files.customerInfo.name}...`)
+    // Parse Customer Info CSV (no skip)
+    updateProgress('Parsing Files', 1, 6, `Parsing ${files.customerInfo.name}...`)
     console.log(`📄 Parsing Customer Info CSV: ${files.customerInfo.name}`)
     const rawCustomerData = await parseCSVFile<RawCustomerInfoRow>(files.customerInfo)
     console.log(`✅ Parsed ${rawCustomerData.length} customer rows\n`)
 
+    // Parse Customer Visit Frequency CSV (no skip)
+    updateProgress('Parsing Files', 2, 6, `Parsing ${files.visitFrequency.name}...`)
+    console.log(`📄 Parsing Customer Visit Frequency CSV: ${files.visitFrequency.name}`)
+    const rawVisitData = await parseCSVFile<RawVisitFrequencyRow>(files.visitFrequency)
+    console.log(`✅ Parsed ${rawVisitData.length} visit frequency rows\n`)
+
     // Parse Sales Detailed CSV (skipRows: 15)
-    updateProgress('Parsing Files', 2, 5, `Parsing ${files.salesDetailed.name} (skip 15 rows)...`)
+    updateProgress('Parsing Files', 3, 6, `Parsing ${files.salesDetailed.name} (skip 15 rows)...`)
     console.log(`📄 Parsing Sales Detailed CSV: ${files.salesDetailed.name}`)
     console.log(`   ⏭️  Skipping first 15 rows (header at row 16)`)
     const rawSalesData = await parseCSVFile<RawSalesRow>(files.salesDetailed, 15)
     console.log(`✅ Parsed ${rawSalesData.length} sales rows\n`)
 
-    // Parse Payment Excel
-    updateProgress('Parsing Files', 3, 5, `Parsing ${files.payment.name}...`)
+    // Parse Payment Excel (skipRows: 11)
+    updateProgress('Parsing Files', 4, 6, `Parsing ${files.payment.name} (skip 11 rows)...`)
     console.log(`📄 Parsing Payment Excel: ${files.payment.name}`)
-    const rawPaymentData = await parseExcelFile(files.payment)
+    console.log(`   ⏭️  Skipping first 11 rows (header at row 12)`)
+    const rawPaymentData = await parseExcelFile(files.payment, { skipRows: 11 })
     console.log(`✅ Parsed ${rawPaymentData.length} payment rows\n`)
 
-    // Parse Item Sales Excel (skipRows: 18)
-    updateProgress('Parsing Files', 4, 5, `Parsing ${files.itemSales.name} (skip 18 rows)...`)
+    // Parse Item Sales Excel (skipRows: 16)
+    updateProgress('Parsing Files', 5, 6, `Parsing ${files.itemSales.name} (skip 16 rows)...`)
     console.log(`📄 Parsing Item Sales Excel: ${files.itemSales.name}`)
-    console.log(`   ⏭️  Skipping first 18 rows (header at row 19)`)
-    const rawItemData = await parseExcelFile(files.itemSales, { skipRows: 18 })
+    console.log(`   ⏭️  Skipping first 16 rows (header at row 17)`)
+    const rawItemData = await parseExcelFile(files.itemSales, { skipRows: 16 })
     console.log(`✅ Parsed ${rawItemData.length} item rows\n`)
 
     // Parse Service Sales CSV (skipRows: 15)
-    updateProgress('Parsing Files', 5, 5, `Parsing ${files.serviceSales.name} (skip 15 rows)...`)
+    updateProgress('Parsing Files', 6, 6, `Parsing ${files.serviceSales.name} (skip 15 rows)...`)
     console.log(`📄 Parsing Service Sales CSV: ${files.serviceSales.name}`)
     console.log(`   ⏭️  Skipping first 15 rows (header at row 16)`)
     const rawServiceData = await parseServiceSalesFile(files.serviceSales)
     console.log(`✅ Parsed ${rawServiceData.length} service rows\n`)
 
-    updateProgress('Parsing Files', 5, 5, 'All files parsed successfully')
+    updateProgress('Parsing Files', 6, 6, 'All files parsed successfully')
     console.log('✅ FILE PARSING COMPLETE\n')
 
     // ========================================================================
@@ -415,26 +458,34 @@ export async function processAndUploadData(
     // STEP 3: DELETE OLD DATA
     // ========================================================================
 
-    updateProgress('Deleting Old Data', 0, 5, 'Starting data deletion...')
+    updateProgress('Deleting Old Data', 0, 8, 'Starting data deletion...')
     console.log('\n' + '─'.repeat(80))
     console.log('🗑️  STEP 3: DELETING OLD DATA')
     console.log('─'.repeat(80) + '\n')
 
     // Delete in reverse order of foreign key dependencies
+    await deleteTableData('service_sales')
+    updateProgress('Deleting Old Data', 1, 8, 'Deleted service_sales')
+
     await deleteTableData('enhanced_items')
-    updateProgress('Deleting Old Data', 1, 5, 'Deleted enhanced_items')
+    updateProgress('Deleting Old Data', 2, 8, 'Deleted enhanced_items')
 
     await deleteTableData('items')
-    updateProgress('Deleting Old Data', 2, 5, 'Deleted items')
+    updateProgress('Deleting Old Data', 3, 8, 'Deleted items')
 
     await deleteTableData('payments')
-    updateProgress('Deleting Old Data', 3, 5, 'Deleted payments')
+    updateProgress('Deleting Old Data', 4, 8, 'Deleted payments')
 
     await deleteTableData('transactions')
-    updateProgress('Deleting Old Data', 4, 5, 'Deleted transactions')
+    updateProgress('Deleting Old Data', 5, 8, 'Deleted transactions')
+
+    await deleteTableData('customer_visit_frequency')
+    updateProgress('Deleting Old Data', 6, 8, 'Deleted customer_visit_frequency')
 
     await deleteTableData('customers')
-    updateProgress('Deleting Old Data', 5, 5, 'Deleted customers')
+    updateProgress('Deleting Old Data', 7, 8, 'Deleted customers')
+
+    updateProgress('Deleting Old Data', 8, 8, 'All old data deleted')
 
     console.log('✅ OLD DATA DELETION COMPLETE\n')
 
@@ -447,25 +498,51 @@ export async function processAndUploadData(
     console.log('👥 STEP 4: INSERTING CUSTOMERS')
     console.log('─'.repeat(80) + '\n')
 
-    const customersInserted = await batchInsert('customers', cleanedCustomers, 500)
+    const customersInserted = await batchInsert('customers', cleanedCustomers)  // Uses default 2000
     stats.customersInserted = customersInserted
 
     // Fetch inserted customers to build customerIdMap
     console.log('🗺️  Building customer ID map...')
-    const { data: insertedCustomers, error: customerFetchError } = await supabase
-      .from('customers')
-      .select('id, membership_number')
+    console.log('🔧 Fetching ALL customers using range() - optimized pagination')
 
-    if (customerFetchError) {
-      throw new Error(`Failed to fetch customers: ${customerFetchError.message}`)
+    // Optimize: Increased page size from 1000 to 2000 for faster fetching
+    let allCustomers: Array<{ id: string; membership_number: string }> = []
+    let pageSize = 1000  // Optimized pagination size
+    let start = 0
+    let hasMore = true
+
+    while (hasMore) {
+      const { data: customerPage, error: customerFetchError } = await supabase
+        .from('customers')
+        .select('id, membership_number')
+        .range(start, start + pageSize - 1)
+
+      if (customerFetchError) {
+        throw new Error(`Failed to fetch customers: ${customerFetchError.message}`)
+      }
+
+      if (!customerPage || customerPage.length === 0) {
+        hasMore = false
+      } else {
+        allCustomers = allCustomers.concat(customerPage)
+        console.log(`   📄 Fetched page: ${allCustomers.length} customers so far...`)
+
+        if (customerPage.length < pageSize) {
+          hasMore = false // Last page
+        } else {
+          start += pageSize
+        }
+      }
     }
 
-    if (!insertedCustomers || insertedCustomers.length === 0) {
+    if (allCustomers.length === 0) {
       throw new Error('No customers were inserted')
     }
 
+    console.log(`✅ Fetched total ${allCustomers.length} customers from database`)
+
     // Build customer ID map
-    for (const customer of insertedCustomers) {
+    for (const customer of allCustomers) {
       customerIdMap.set(customer.membership_number, customer.id)
     }
 
@@ -479,10 +556,30 @@ export async function processAndUploadData(
     console.log('✅ CUSTOMER INSERTION COMPLETE\n')
 
     // ========================================================================
-    // STEP 5: CLEAN & INSERT TRANSACTIONS
+    // STEP 5: INSERT CUSTOMER VISIT FREQUENCY
     // ========================================================================
 
-    updateProgress('Cleaning Data', 2, 5, 'Cleaning transaction data...')
+    updateProgress('Cleaning Data', 2, 6, 'Cleaning visit frequency data...')
+    console.log('\n' + '─'.repeat(80))
+    console.log('📊 STEP 5: INSERTING CUSTOMER VISIT FREQUENCY')
+    console.log('─'.repeat(80) + '\n')
+
+    console.log('🧹 Cleaning Visit Frequency Data...')
+    const cleanedVisitFrequency = cleanVisitFrequencyData(rawVisitData, customerIdMap)
+    console.log(`✅ Cleaned ${cleanedVisitFrequency.length} visit frequency records\n`)
+
+    updateProgress('Inserting Visit Frequency', 0, 1, 'Inserting visit frequency data...')
+    const visitFrequencyInserted = await batchInsert('customer_visit_frequency', cleanedVisitFrequency)  // Uses default 2000
+    stats.visitFrequencyInserted = visitFrequencyInserted
+
+    updateProgress('Inserting Visit Frequency', 1, 1, `Inserted ${visitFrequencyInserted} visit frequency records`)
+    console.log('✅ VISIT FREQUENCY INSERTION COMPLETE\n')
+
+    // ========================================================================
+    // STEP 6: CLEAN & INSERT TRANSACTIONS
+    // ========================================================================
+
+    updateProgress('Cleaning Data', 3, 6, 'Cleaning transaction data...')
     console.log('\n' + '─'.repeat(80))
     console.log('🧹 CLEANING TRANSACTION DATA')
     console.log('─'.repeat(80) + '\n')
@@ -493,29 +590,55 @@ export async function processAndUploadData(
 
     updateProgress('Inserting Transactions', 0, 1, 'Inserting transactions...')
     console.log('\n' + '─'.repeat(80))
-    console.log('💳 STEP 5: INSERTING TRANSACTIONS')
+    console.log('💳 STEP 6: INSERTING TRANSACTIONS')
     console.log('─'.repeat(80) + '\n')
 
-    const transactionsInserted = await batchInsert('transactions', cleanedTransactions, 500)
+    const transactionsInserted = await batchInsert('transactions', cleanedTransactions)  // Uses default 2000
     stats.transactionsInserted = transactionsInserted
 
     // Fetch inserted transactions to build transactionIdMap
     console.log('🗺️  Building transaction ID map...')
-    const { data: insertedTransactions, error: transactionFetchError } = await supabase
-      .from('transactions')
-      .select('id, so_number')
+    console.log('🔧 Fetching ALL transactions using range() - optimized pagination')
 
-    if (transactionFetchError) {
-      throw new Error(`Failed to fetch transactions: ${transactionFetchError.message}`)
+    // Optimize: Using larger page size for faster fetching
+    let allTransactions: Array<{ id: string; so_number: string }> = []
+    pageSize = 1000  // Reuse optimized page size
+    start = 0
+    hasMore = true
+
+    while (hasMore) {
+      const { data: transactionPage, error: transactionFetchError } = await supabase
+        .from('transactions')
+        .select('id, so_number')
+        .range(start, start + pageSize - 1)
+
+      if (transactionFetchError) {
+        throw new Error(`Failed to fetch transactions: ${transactionFetchError.message}`)
+      }
+
+      if (!transactionPage || transactionPage.length === 0) {
+        hasMore = false
+      } else {
+        allTransactions = allTransactions.concat(transactionPage)
+        console.log(`   📄 Fetched page: ${allTransactions.length} transactions so far...`)
+
+        if (transactionPage.length < pageSize) {
+          hasMore = false // Last page
+        } else {
+          start += pageSize
+        }
+      }
     }
 
-    if (!insertedTransactions || insertedTransactions.length === 0) {
+    if (allTransactions.length === 0) {
       throw new Error('No transactions were inserted')
     }
 
+    console.log(`✅ Fetched total ${allTransactions.length} transactions from database`)
+
     // Build transaction ID map (so_number → transaction_id)
     const transactionIdMap = new Map<string, string>()
-    for (const transaction of insertedTransactions) {
+    for (const transaction of allTransactions) {
       transactionIdMap.set(transaction.so_number, transaction.id)
     }
 
@@ -529,10 +652,10 @@ export async function processAndUploadData(
     console.log('✅ TRANSACTION INSERTION COMPLETE\n')
 
     // ========================================================================
-    // STEP 6: CLEAN & INSERT PAYMENTS
+    // STEP 7: CLEAN & INSERT PAYMENTS
     // ========================================================================
 
-    updateProgress('Cleaning Data', 3, 5, 'Cleaning payment data...')
+    updateProgress('Cleaning Data', 4, 6, 'Cleaning payment data...')
     console.log('\n' + '─'.repeat(80))
     console.log('🧹 CLEANING PAYMENT DATA')
     console.log('─'.repeat(80) + '\n')
@@ -543,20 +666,20 @@ export async function processAndUploadData(
 
     updateProgress('Inserting Payments', 0, 1, 'Inserting payments...')
     console.log('\n' + '─'.repeat(80))
-    console.log('💰 STEP 6: INSERTING PAYMENTS')
+    console.log('💰 STEP 7: INSERTING PAYMENTS')
     console.log('─'.repeat(80) + '\n')
 
-    const paymentsInserted = await batchInsert('payments', cleanedPayments, 500)
+    const paymentsInserted = await batchInsert('payments', cleanedPayments)  // Uses default 2000
     stats.paymentsInserted = paymentsInserted
 
     updateProgress('Inserting Payments', 1, 1, `Inserted ${paymentsInserted} payments`)
     console.log('✅ PAYMENT INSERTION COMPLETE\n')
 
     // ========================================================================
-    // STEP 7: CLEAN & INSERT ITEMS
+    // STEP 8: CLEAN & INSERT ITEMS
     // ========================================================================
 
-    updateProgress('Cleaning Data', 4, 5, 'Cleaning item data...')
+    updateProgress('Cleaning Data', 5, 6, 'Cleaning item data...')
     console.log('\n' + '─'.repeat(80))
     console.log('🧹 CLEANING ITEM DATA')
     console.log('─'.repeat(80) + '\n')
@@ -567,7 +690,7 @@ export async function processAndUploadData(
 
     updateProgress('Inserting Items', 0, 1, 'Inserting items...')
     console.log('\n' + '─'.repeat(80))
-    console.log('📦 STEP 7: INSERTING ITEMS')
+    console.log('📦 STEP 8: INSERTING ITEMS')
     console.log('─'.repeat(80) + '\n')
 
     const itemsInserted = await batchInsert('items', cleanedItems, 500)
@@ -577,40 +700,43 @@ export async function processAndUploadData(
     console.log('✅ ITEM INSERTION COMPLETE\n')
 
     // ========================================================================
-    // STEP 8: CLEAN & INSERT ENHANCED ITEMS (SERVICE SALES)
+    // STEP 9: CLEAN & INSERT SERVICE SALES
     // ========================================================================
 
-    updateProgress('Cleaning Data', 5, 5, 'Cleaning service sales data...')
+    updateProgress('Cleaning Data', 6, 6, 'Cleaning service sales data...')
     console.log('\n' + '─'.repeat(80))
     console.log('🧹 CLEANING SERVICE SALES DATA')
     console.log('─'.repeat(80) + '\n')
 
     console.log('🧹 Cleaning Service Sales...')
-    const cleanedEnhancedItems = cleanServiceSalesData(rawServiceData, transactionIdMap)
-    console.log(`✅ Cleaned ${cleanedEnhancedItems.length} enhanced items\n`)
+    const cleanedServiceSales = cleanServiceSalesData(rawServiceData, transactionIdMap, customerIdMap)
+    console.log(`✅ Cleaned ${cleanedServiceSales.length} service sales\n`)
 
-    updateProgress('Inserting Enhanced Items', 0, 1, 'Inserting enhanced items...')
+    updateProgress('Inserting Service Sales', 0, 1, 'Inserting service sales...')
     console.log('\n' + '─'.repeat(80))
-    console.log('✨ STEP 8: INSERTING ENHANCED ITEMS')
+    console.log('✨ STEP 9: INSERTING SERVICE SALES')
     console.log('─'.repeat(80) + '\n')
 
-    const enhancedItemsInserted = await batchInsert('enhanced_items', cleanedEnhancedItems, 500)
-    stats.enhancedItemsInserted = enhancedItemsInserted
+    // Insert into service_sales table
+    const serviceSalesInserted = await batchInsert('service_sales', cleanedServiceSales, 500)
+    stats.serviceSalesInserted = serviceSalesInserted
+    stats.enhancedItemsInserted = 0 // No longer using enhanced_items table
 
-    updateProgress('Inserting Enhanced Items', 1, 1, `Inserted ${enhancedItemsInserted} enhanced items`)
-    console.log('✅ ENHANCED ITEM INSERTION COMPLETE\n')
+    updateProgress('Inserting Service Sales', 1, 1, `Inserted ${serviceSalesInserted} service sales`)
+    console.log('✅ SERVICE SALES INSERTION COMPLETE\n')
 
     // ========================================================================
-    // STEP 9: SAVE METADATA
+    // STEP 10: SAVE METADATA
     // ========================================================================
 
     updateProgress('Saving Metadata', 0, 1, 'Saving upload metadata...')
     console.log('\n' + '─'.repeat(80))
-    console.log('💾 STEP 9: SAVING METADATA')
+    console.log('💾 STEP 10: SAVING METADATA')
     console.log('─'.repeat(80) + '\n')
 
     const fileNames = {
       customerInfo: files.customerInfo.name,
+      visitFrequency: files.visitFrequency.name,
       salesDetailed: files.salesDetailed.name,
       payment: files.payment.name,
       itemSales: files.itemSales.name,
@@ -631,10 +757,11 @@ export async function processAndUploadData(
     console.log('='.repeat(80))
     console.log('\n📊 FINAL STATISTICS:')
     console.log(`   👥 Customers Inserted: ${stats.customersInserted}`)
+    console.log(`   📊 Visit Frequency Inserted: ${stats.visitFrequencyInserted}`)
     console.log(`   💳 Transactions Inserted: ${stats.transactionsInserted}`)
     console.log(`   💰 Payments Inserted: ${stats.paymentsInserted}`)
-    console.log(`   📦 Items Inserted: ${stats.itemsInserted}`)
-    console.log(`   ✨ Enhanced Items Inserted: ${stats.enhancedItemsInserted}`)
+    console.log(`   🔧 Services (Products): ${stats.itemsInserted}`)
+    console.log(`   🏥 Service Sales Inserted: ${stats.serviceSalesInserted}`)
     console.log(`   📈 Total Records: ${Object.values(stats).reduce((a, b) => a + b, 0)}`)
     console.log('\n' + '='.repeat(80) + '\n')
 

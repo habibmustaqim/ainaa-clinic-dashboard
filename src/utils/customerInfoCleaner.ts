@@ -533,19 +533,29 @@ export function cleanCustomerInfoData(
 
   // DEBUG: Log first row to see actual structure
   if (rawData.length > 0) {
-    console.log('DEBUG: First customer row keys:', Object.keys(rawData[0]).slice(0, 15))
-    console.log('DEBUG: First customer row sample:', {
-      'Membership Number': rawData[0]['Membership Number'],
-      'Customer Name': rawData[0]['Customer Name'],
-      'Name': rawData[0]['Name'],
+    console.log('━'.repeat(80))
+    console.log('🔍 DEBUG: Customer CSV Structure Analysis')
+    console.log('━'.repeat(80))
+    console.log('Total rows to process:', rawData.length)
+    console.log('\nFirst 20 column names in CSV:')
+    Object.keys(rawData[0]).slice(0, 20).forEach((key, index) => {
+      console.log(`  ${index + 1}. "${key}"`)
+    })
+    console.log('\nSample data from first row:')
+    console.log({
+      'Membership #': rawData[0]['Membership #'],              // Actual column name
+      'Customer': rawData[0]['Customer'],                      // Actual column name
+      'Identification #': rawData[0]['Identification #'],      // IC number column
       'Contact Number': rawData[0]['Contact Number'],
       'Email': rawData[0]['Email']
     })
+    console.log('━'.repeat(80) + '\n')
   }
 
   for (const row of rawData) {
     const membershipNumber = (
-      row['Membership Number'] ||
+      row['Membership #'] ||          // Correct column name from actual CSV
+      row['Membership Number'] ||     // Keep as fallback
       row['Member Number'] ||
       row['Member ID'] ||
       ''
@@ -553,6 +563,9 @@ export function cleanCustomerInfoData(
 
     if (!membershipNumber) {
       rejectedNoMembership++
+      if (rejectedNoMembership <= 3) {
+        console.log(`   ⚠️  Rejected row ${rejectedNoMembership} (no membership): Available keys:`, Object.keys(row).slice(0, 10))
+      }
       continue
     }
 
@@ -564,7 +577,8 @@ export function cleanCustomerInfoData(
     }
 
     const customerName = (
-      row['Customer Name'] ||
+      row['Customer'] ||               // Correct column name from actual CSV
+      row['Customer Name'] ||          // Keep as fallback
       row['Name'] ||
       row['Full Name'] ||
       ''
@@ -572,6 +586,9 @@ export function cleanCustomerInfoData(
 
     if (!customerName) {
       rejectedNoName++
+      if (rejectedNoName <= 3) {
+        console.log(`   ⚠️  Rejected row ${rejectedNoName} (no name) with membership ${membershipNumber}: Available keys:`, Object.keys(row).slice(0, 10))
+      }
       continue
     }
 
@@ -582,11 +599,23 @@ export function cleanCustomerInfoData(
     }
   }
 
-  console.log(`Cleaned ${cleanedCustomers.length} customers from ${rawData.length} raw rows`)
-  console.log(`Customer rejection breakdown:`)
-  console.log(`   No membership number: ${rejectedNoMembership}`)
-  console.log(`   No customer name: ${rejectedNoName}`)
-  console.log(`   Duplicate membership: ${rejectedDuplicate}`)
+  console.log('\n' + '━'.repeat(80))
+  console.log('📊 CUSTOMER CLEANING RESULTS')
+  console.log('━'.repeat(80))
+  console.log(`✅ Successfully cleaned: ${cleanedCustomers.length} customers`)
+  console.log(`📝 Total rows processed: ${rawData.length}`)
+  console.log(`\n❌ Rejection breakdown:`)
+  console.log(`   • No membership number: ${rejectedNoMembership}`)
+  console.log(`   • No customer name: ${rejectedNoName}`)
+  console.log(`   • Duplicate membership: ${rejectedDuplicate}`)
+  console.log(`   • Total rejected: ${rejectedNoMembership + rejectedNoName + rejectedDuplicate}`)
+
+  if (cleanedCustomers.length === 0) {
+    console.error('\n⛔ ERROR: No customers were cleaned!')
+    console.error('This means all rows were rejected during validation.')
+    console.error('Check the column names in your CSV file match the expected format.')
+  }
+  console.log('━'.repeat(80) + '\n')
 
   return cleanedCustomers
 }

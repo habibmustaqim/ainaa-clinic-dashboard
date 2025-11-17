@@ -55,14 +55,14 @@ const StatsCard: React.FC<StatsCardProps> = ({
 
   return (
     <Card className="relative overflow-hidden hover:shadow-lg transition-all duration-300 hover:scale-105">
-      {/* Background gradient decoration */}
-      <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${gradient} opacity-10 rounded-full -mr-16 -mt-16`}></div>
+      {/* Background decoration */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 dark:bg-primary/10 rounded-full -mr-16 -mt-16"></div>
 
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-gray-600">
           {title}
         </CardTitle>
-        <div className={`h-10 w-10 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md`}>
+        <div className="h-10 w-10 rounded-full bg-primary dark:bg-primary flex items-center justify-center shadow-md">
           <Icon className="h-5 w-5 text-white" />
         </div>
       </CardHeader>

@@ -22,23 +22,64 @@ export async function parseExcelFile(file: File, options?: { skipRows?: number }
 
         console.log(`📄 Reading sheet: "${firstSheetName}"`)
 
-        // Convert to JSON with optional row skipping
-        const parseOptions: XLSX.Sheet2JSONOpts = {}
-        if (options?.skipRows && options.skipRows > 0) {
-          parseOptions.range = options.skipRows // Skip first N rows
-          console.log(`⏭️  Skipping first ${options.skipRows} rows of ${file.name}`)
+        // Special handling for Item Sales which has split headers (rows 17-18)
+        const isItemSales = file.name.toLowerCase().includes('item') || file.name.toLowerCase().includes('sales')
+
+        if (isItemSales && options?.skipRows === 16) {
+          console.log(`⏭️  Detected Item Sales file - using split header parsing (rows 17-18)`)
+
+          // Get raw data as array
+          const rawArrayData = XLSX.utils.sheet_to_json(worksheet, {
+            header: 1, // Return array of arrays
+            raw: false, // Return formatted strings
+            defval: '' // Default for empty cells
+          }) as any[][]
+
+          // Extract headers from rows 17 and 18 (indices 16 and 17)
+          const headerRow17 = rawArrayData[16] || []
+          const headerRow18 = rawArrayData[17] || []
+
+          // Merge headers: use row 17 if not empty, otherwise use row 18
+          const mergedHeaders = headerRow17.map((val, idx) => {
+            const h17 = String(val || '').trim()
+            const h18 = String(headerRow18[idx] || '').trim()
+            return h17 || h18 || `Column_${idx + 1}`
+          })
+
+          console.log(`🔍 Merged headers from rows 17-18: ${mergedHeaders.length} columns`)
+          console.log(`   First 15 headers:`, mergedHeaders.slice(0, 15))
+          console.log(`   Headers 16-35:`, mergedHeaders.slice(15, 35))
+
+          // Convert data rows (starting from row 19, index 18) to objects
+          const jsonData = rawArrayData.slice(18).map(row => {
+            const obj: any = {}
+            mergedHeaders.forEach((header, idx) => {
+              obj[header] = row[idx] !== undefined ? String(row[idx]) : ''
+            })
+            return obj
+          })
+
+          console.log(`Parsed Excel file: ${file.name}, rows: ${jsonData.length}`)
+          resolve(jsonData)
+        } else {
+          // Original parsing logic for other files
+          const parseOptions: XLSX.Sheet2JSONOpts = {}
+          if (options?.skipRows && options.skipRows > 0) {
+            parseOptions.range = options.skipRows // Skip first N rows
+            console.log(`⏭️  Skipping first ${options.skipRows} rows of ${file.name}`)
+          }
+
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, parseOptions)
+
+          // DEBUG: Log first row structure if available
+          if (jsonData.length > 0) {
+            const firstRowKeys = Object.keys(jsonData[0])
+            console.log(`🔍 First row has ${firstRowKeys.length} columns:`, firstRowKeys.slice(0, 10))
+          }
+
+          console.log(`Parsed Excel file: ${file.name}, rows: ${jsonData.length}`)
+          resolve(jsonData)
         }
-
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, parseOptions)
-
-        // DEBUG: Log first row structure if available
-        if (jsonData.length > 0) {
-          const firstRowKeys = Object.keys(jsonData[0])
-          console.log(`🔍 First row has ${firstRowKeys.length} columns:`, firstRowKeys.slice(0, 10))
-        }
-
-        console.log(`Parsed Excel file: ${file.name}, rows: ${jsonData.length}`)
-        resolve(jsonData)
       } catch (error) {
         console.error('Error parsing Excel file:', error)
         reject(error)
@@ -212,7 +253,14 @@ export function cleanItemRow(
   raw: RawItemRow,
   transactionIdMap: Map<string, string>
 ): Omit<Item, 'id' | 'created_at'> | null {
-  const soNumber = raw['SO #']?.toString().trim()
+  // Try multiple column name variations for SO number
+  const soNumber = (
+    raw['Sales #'] ||
+    raw['SO #'] ||
+    raw['SO#'] ||
+    raw['Transaction']
+  )?.toString().trim()
+
   if (!soNumber) return null
 
   const transactionId = soNumber ? transactionIdMap.get(soNumber) : undefined
@@ -234,7 +282,16 @@ export function cleanItemRow(
 
   const quantity = parseQuantity(raw['Quantity'] || raw['Qty'])
   const unitPrice = cleanMonetaryValue(raw['Unit Price'] || raw['Price'])
-  const totalPrice = cleanMonetaryValue(raw['Total'] || raw['Total Price'])
+
+  // Try multiple column names for total price, including split header columns
+  const totalPrice = cleanMonetaryValue(
+    raw['Payment to date'] ||  // Split header (row 18) - column AE
+    raw['Payment to Date'] ||
+    raw['Total'] ||
+    raw['Total Price'] ||
+    raw['Nett'] ||
+    raw['Net']
+  )
 
   return {
     transaction_id: transactionId,
@@ -242,7 +299,8 @@ export function cleanItemRow(
     quantity: quantity,
     unit_price: unitPrice,
     total_price: totalPrice || (unitPrice * quantity),
-    category: raw['Category']?.toString().trim() || raw['Type']?.toString().trim() || null
+    category: raw['Category']?.toString().trim() || raw['Type']?.toString().trim() || null,
+    sale_date: parseExcelDate(raw['Date'])
   }
 }
 
@@ -259,6 +317,7 @@ export function cleanItemSalesData(
   if (rawData.length > 0) {
     console.log('🔍 DEBUG: First item row keys:', Object.keys(rawData[0]).slice(0, 15))
     console.log('🔍 DEBUG: First item row sample:', {
+      'Sales #': rawData[0]['Sales #'],
       'SO #': rawData[0]['SO #'],
       'Item Name': rawData[0]['Item Name'],
       'Item': rawData[0]['Item'],
@@ -275,9 +334,25 @@ export function cleanItemSalesData(
   let rejectedNoSO = 0
   let rejectedNoTransaction = 0
   let rejectedNoItemName = 0
+  let emptyRowsSkipped = 0
 
   for (const row of rawData) {
-    const soNumber = row['SO #']?.toString().trim()
+    // Filter out empty rows (where all values are null/empty)
+    const values = Object.values(row)
+    const hasData = values.some(val => val != null && val !== '')
+    if (!hasData) {
+      emptyRowsSkipped++
+      continue
+    }
+
+    // Try multiple column name variations for SO number
+    const soNumber = (
+      row['Sales #'] ||
+      row['SO #'] ||
+      row['SO#'] ||
+      row['Transaction']
+    )?.toString().trim()
+
     if (!soNumber) {
       rejectedNoSO++
       continue
@@ -313,6 +388,7 @@ export function cleanItemSalesData(
 
   console.log(`✅ Cleaned ${cleanedItems.length} items from ${rawData.length} raw rows`)
   console.log(`📊 Item rejection breakdown:`)
+  console.log(`   ⏭️  Empty rows skipped: ${emptyRowsSkipped}`)
   console.log(`   ❌ No SO#: ${rejectedNoSO}`)
   console.log(`   ❌ Transaction not found: ${rejectedNoTransaction}`)
   console.log(`   ❌ No item name: ${rejectedNoItemName}`)

@@ -27,6 +27,10 @@ export interface RawSalesRow {
   'Tax Amount'?: string | number
   'Net Amount'?: string | number
   'Net'?: string | number
+  'Nett'?: string | number
+  'Payment to Date'?: string | number
+  'Paid'?: string | number
+  'Amount Paid'?: string | number
   'Outstanding'?: string | number
   'Outstanding Amount'?: string | number
   'Cancelled'?: string
@@ -140,6 +144,7 @@ export function cleanSalesRow(
 
   // Get membership number from various possible column names
   const membershipNumber = (
+    raw['Membership #'] ||          // Actual column name in CSV
     raw['Membership No'] ||
     raw['Membership Number'] ||
     raw['Member No'] ||
@@ -175,7 +180,8 @@ export function cleanSalesRow(
   const totalAmount = cleanMonetaryValue(raw['Total Amount'] || raw['Amount'] || raw['Total'])
   const totalDiscount = cleanMonetaryValue(raw['Discount'] || raw['Total Discount'])
   const taxAmount = cleanMonetaryValue(raw['Tax'] || raw['Tax Amount'])
-  const netAmount = cleanMonetaryValue(raw['Net Amount'] || raw['Net'])
+  const netAmount = cleanMonetaryValue(raw['Net Amount'] || raw['Net'] || raw['Nett'])
+  const paymentToDate = cleanMonetaryValue(raw['Payment to Date'] || raw['Paid'] || raw['Amount Paid'])
   const outstandingAmount = cleanMonetaryValue(raw['Outstanding'] || raw['Outstanding Amount'])
 
   // Parse cancelled status
@@ -202,6 +208,7 @@ export function cleanSalesRow(
     total_discount: totalDiscount,
     tax_amount: taxAmount,
     net_amount: netAmount,
+    payment_to_date: paymentToDate,
     outstanding_amount: outstandingAmount,
     is_cancelled: isCancelled
   }
@@ -236,6 +243,13 @@ export function cleanSalesDetailedData(
   for (let i = 0; i < rawData.length; i++) {
     const row = rawData[i]
 
+    // Filter out date/day separator rows and Total rows
+    const firstColumn = Object.values(row)[0]?.toString().trim() || ''
+    // Skip rows that start with date patterns (e.g., "01 Jan 2024, Monday") or "Total"
+    if (firstColumn.match(/^\d{1,2}\s+[A-Za-z]+\s+\d{4}/) || firstColumn.toLowerCase() === 'total') {
+      continue
+    }
+
     // Track rejection reasons
     const soNumber = (
       row['SO #'] ||
@@ -250,6 +264,7 @@ export function cleanSalesDetailedData(
     }
 
     const membershipNumber = (
+      row['Membership #'] ||          // Actual column name in CSV
       row['Membership No'] ||
       row['Membership Number'] ||
       row['Member No'] ||
