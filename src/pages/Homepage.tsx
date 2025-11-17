@@ -2,10 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   BarChart3,
-  Users,
-  DollarSign,
-  ShoppingBag,
-  TrendingUp,
   Package,
   Award
 } from 'lucide-react'
@@ -13,6 +9,7 @@ import { supabase, Customer } from '@/lib/supabase'
 import { useCustomer } from '@/context/CustomerContext'
 import { formatCurrency } from '@/utils/formatters'
 import { DateRange, getPresetRange, toLocalDateString } from '@/utils/dateHelpers'
+import { STAT_CONFIGS } from '@/config/statsConfig'
 
 // UI Components
 import { BentoGrid, StatCard, BentoCard } from '@/components/ui/bento-card'
@@ -1136,13 +1133,13 @@ const Homepage: React.FC = () => {
           <StatCard
             title="Total Customers"
             value={stats.totalCustomers.toLocaleString()}
-            icon={Users}
-            iconColor="primary"
+            icon={STAT_CONFIGS.customers.icon}
+            iconColor={STAT_CONFIGS.customers.iconColor}
             variant="gradient"
             loading={loadingStats}
             sparkline={stats.customersSparkline}
             previousSparkline={stats.prevCustomersSparkline}
-            sparklineColor="#3b82f6"
+            sparklineColor={STAT_CONFIGS.customers.sparklineColor}
             change={stats.customersChange}
             changeLabel={getComparisonLabel(dateRange.preset)}
             trend={stats.customersChange > 0 ? 'up' : stats.customersChange < 0 ? 'down' : 'neutral'}
@@ -1151,13 +1148,13 @@ const Homepage: React.FC = () => {
           <StatCard
             title="Total Revenue"
             value={formatCurrency(stats.totalRevenue)}
-            icon={DollarSign}
-            iconColor="success"
+            icon={STAT_CONFIGS.revenue.icon}
+            iconColor={STAT_CONFIGS.revenue.iconColor}
             variant="gradient"
             loading={loadingStats}
             sparkline={stats.revenueSparkline}
             previousSparkline={stats.prevRevenueSparkline}
-            sparklineColor="#10b981"
+            sparklineColor={STAT_CONFIGS.revenue.sparklineColor}
             change={stats.revenueChange}
             changeLabel={getComparisonLabel(dateRange.preset)}
             trend={stats.revenueChange > 0 ? 'up' : stats.revenueChange < 0 ? 'down' : 'neutral'}
@@ -1166,13 +1163,13 @@ const Homepage: React.FC = () => {
           <StatCard
             title="Total Transactions"
             value={stats.totalTransactions.toLocaleString()}
-            icon={ShoppingBag}
-            iconColor="secondary"
+            icon={STAT_CONFIGS.transactions.icon}
+            iconColor={STAT_CONFIGS.transactions.iconColor}
             variant="gradient"
             loading={loadingStats}
             sparkline={stats.transactionsSparkline}
             previousSparkline={stats.prevTransactionsSparkline}
-            sparklineColor="#8b5cf6"
+            sparklineColor={STAT_CONFIGS.transactions.sparklineColor}
             change={stats.transactionsChange}
             changeLabel={getComparisonLabel(dateRange.preset)}
             trend={stats.transactionsChange > 0 ? 'up' : stats.transactionsChange < 0 ? 'down' : 'neutral'}
@@ -1181,13 +1178,13 @@ const Homepage: React.FC = () => {
           <StatCard
             title="Total Treatments"
             value={stats.totalTreatments.toLocaleString()}
-            icon={TrendingUp}
-            iconColor="accent"
+            icon={STAT_CONFIGS.treatments.icon}
+            iconColor={STAT_CONFIGS.treatments.iconColor}
             variant="gradient"
             loading={loadingStats}
             sparkline={stats.treatmentsSparkline}
             previousSparkline={stats.prevTreatmentsSparkline}
-            sparklineColor="#f59e0b"
+            sparklineColor={STAT_CONFIGS.treatments.sparklineColor}
             change={stats.treatmentsChange}
             changeLabel={getComparisonLabel(dateRange.preset)}
             trend={stats.treatmentsChange > 0 ? 'up' : stats.treatmentsChange < 0 ? 'down' : 'neutral'}

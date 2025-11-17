@@ -55,6 +55,7 @@ import { SearchInput } from '@/components/ui/SearchInput'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatCurrency, formatDate, getInitials } from '@/utils/formatters'
+import { STAT_CONFIGS } from '@/config/statsConfig'
 import { supabase, Customer, Transaction, Payment, CustomerVisitFrequency, ServiceSales } from '@/lib/supabase'
 import { useCustomer } from '@/context/CustomerContext'
 
@@ -718,8 +719,8 @@ const CustomerDashboard: React.FC = () => {
             <StatCard
               title="Lifetime Value"
               subtitle="Total spent"
-              icon={DollarSign}
-              iconColor="success"
+              icon={STAT_CONFIGS.lifetime.icon}
+              iconColor={STAT_CONFIGS.lifetime.iconColor}
               value={
                 <CountUp
                   end={stats.totalSpent}
@@ -733,6 +734,7 @@ const CustomerDashboard: React.FC = () => {
               changeLabel="vs avg customer"
               trend="up"
               sparkline={lifetimeSparkline}
+              sparklineColor={STAT_CONFIGS.lifetime.sparklineColor}
               variant="gradient"
               className="animate-scale-in"
               style={{ animationDelay: '0ms' }}
@@ -741,8 +743,8 @@ const CustomerDashboard: React.FC = () => {
             <StatCard
               title="Visit Frequency"
               subtitle="Total visits"
-              icon={Activity}
-              iconColor="primary"
+              icon={STAT_CONFIGS.visits.icon}
+              iconColor={STAT_CONFIGS.visits.iconColor}
               value={
                 <CountUp
                   end={stats.totalVisits}
@@ -755,6 +757,7 @@ const CustomerDashboard: React.FC = () => {
               changeLabel="per month avg"
               trend="up"
               sparkline={visitSparkline}
+              sparklineColor={STAT_CONFIGS.visits.sparklineColor}
               variant="gradient"
               className="animate-scale-in"
               style={{ animationDelay: '100ms' }}
@@ -763,8 +766,8 @@ const CustomerDashboard: React.FC = () => {
             <StatCard
               title="Customer Loyalty"
               subtitle={`${stats.customerLifetimeDays} days`}
-              icon={Clock}
-              iconColor="accent"
+              icon={STAT_CONFIGS.loyalty.icon}
+              iconColor={STAT_CONFIGS.loyalty.iconColor}
               value={
                 <CountUp
                   end={stats.lastVisitDays}
@@ -777,6 +780,7 @@ const CustomerDashboard: React.FC = () => {
               changeLabel="last visit"
               trend={stats.lastVisitDays > 30 ? "down" : "up"}
               sparkline={loyaltySparkline}
+              sparklineColor={STAT_CONFIGS.loyalty.sparklineColor}
               variant="gradient"
               className="animate-scale-in"
               style={{ animationDelay: '200ms' }}
@@ -785,7 +789,7 @@ const CustomerDashboard: React.FC = () => {
             <StatCard
               title="Outstanding"
               subtitle="Balance due"
-              icon={TrendingUp}
+              icon={STAT_CONFIGS.payments.icon}
               iconColor={stats.outstandingBalance > 0 ? "danger" : "success"}
               value={
                 <CountUp
@@ -800,6 +804,7 @@ const CustomerDashboard: React.FC = () => {
               changeLabel="of total"
               trend={stats.outstandingBalance > 0 ? "up" : "neutral"}
               sparkline={outstandingSparkline}
+              sparklineColor={STAT_CONFIGS.payments.sparklineColor}
               variant="gradient"
               className="animate-scale-in"
               style={{ animationDelay: '300ms' }}

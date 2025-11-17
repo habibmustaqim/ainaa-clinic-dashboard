@@ -34,8 +34,8 @@ const sizeClasses = {
 
 const iconColorClasses = {
   primary: 'text-primary bg-primary/10 dark:text-primary dark:bg-primary/20',
-  secondary: 'text-primary/80 bg-primary/5 dark:text-primary/70 dark:bg-primary/15',
-  accent: 'text-primary/60 bg-primary/5 dark:text-primary/50 dark:bg-primary/10',
+  secondary: 'text-secondary bg-secondary/10 dark:text-secondary dark:bg-secondary/20',
+  accent: 'text-accent bg-accent/10 dark:text-accent dark:bg-accent/20',
   success: 'text-success bg-success/10 dark:text-success dark:bg-success/20',
   warning: 'text-warning bg-warning/10 dark:text-warning dark:bg-warning/20',
   danger: 'text-destructive bg-destructive/10 dark:text-destructive dark:bg-destructive/20',
@@ -443,8 +443,8 @@ export const StatCard: React.FC<StatCardProps> = ({
   // Import iconColorClasses from BentoCard
   const iconColorClasses = {
     primary: 'text-primary',
-    secondary: 'text-primary/80',
-    accent: 'text-primary/60',
+    secondary: 'text-secondary',
+    accent: 'text-accent',
     success: 'text-success',
     warning: 'text-warning',
     danger: 'text-destructive',
