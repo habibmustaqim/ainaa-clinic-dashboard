@@ -114,6 +114,7 @@ export interface Item {
   category: string | null
   sale_date: string | null
   sales_person: string | null
+  payment_method: string | null
   created_at: string
 }
 
@@ -224,7 +225,7 @@ export interface ServiceSales {
   // Payment details
   payment_amount: number
   payment_outstanding: number
-  payment_mode: string | null
+  payment_method: string | null
   payment_type: string | null
   approval_code: string | null
   bank: string | null

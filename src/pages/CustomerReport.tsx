@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { Tooltip } from '@/components/ui/tooltip'
-import { ColumnSelectionModal, ColumnOption } from '@/components/ui/ColumnSelectionModal'
+import { ColumnSelectionModal, ColumnOption, FilenameToken } from '@/components/ui/ColumnSelectionModal'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 import { exportData, ExportColumn } from '@/utils/exportUtils'
 import { supabase } from '@/lib/supabase'
@@ -43,9 +43,12 @@ interface CustomerReportRow {
 
   // Purchase Behavior
   topServices: string
+  onboardingBeautician: string
+  beauticians: string
 
   // Segmentation
-  customerSegment: 'Active' | 'At Risk' | 'Dormant' | 'New'
+  customerStatus: 'Active' | 'At Risk' | 'Dormant' | 'New'
+  customerRank: 'CONSULTATION' | 'STARTER' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM'
 }
 
 interface MultiSelectOption {
@@ -93,7 +96,7 @@ const CustomerReport: React.FC = () => {
       .join(', ')
   }
 
-  const getCustomerSegment = (lastVisitDate: string | null, totalTransactions: number): 'Active' | 'At Risk' | 'Dormant' | 'New' => {
+  const getCustomerStatus = (lastVisitDate: string | null, totalTransactions: number): 'Active' | 'At Risk' | 'Dormant' | 'New' => {
     if (!lastVisitDate || totalTransactions === 0) return 'New'
     const daysSince = Math.floor((Date.now() - new Date(lastVisitDate).getTime()) / (1000 * 60 * 60 * 24))
     if (daysSince <= 90) return 'Active'
@@ -101,9 +104,72 @@ const CustomerReport: React.FC = () => {
     return 'Dormant'
   }
 
+  const getCustomerRank = (totalRevenue: number): 'CONSULTATION' | 'STARTER' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' => {
+    if (totalRevenue <= 50) return 'CONSULTATION'
+    if (totalRevenue <= 499) return 'STARTER'
+    if (totalRevenue <= 1999) return 'BRONZE'
+    if (totalRevenue <= 4999) return 'SILVER'
+    if (totalRevenue <= 7999) return 'GOLD'
+    return 'PLATINUM'
+  }
+
   const getDaysSinceLastVisit = (lastVisitDate: string | null) => {
     if (!lastVisitDate) return null
     return Math.floor((Date.now() - new Date(lastVisitDate).getTime()) / (1000 * 60 * 60 * 24))
+  }
+
+  const getOnboardingBeautician = (serviceSales: any[], items: any[]) => {
+    // Combine all transactions from both service sales and items
+    const allEntries = [
+      ...(serviceSales?.map(s => ({
+        name: s.sales_person,
+        date: s.sale_date
+      })) || []),
+      ...(items?.map(i => ({
+        name: i.sales_person,
+        date: i.sale_date
+      })) || [])
+    ]
+
+    // Filter out entries without valid names or dates
+    const validEntries = allEntries.filter(e => e.name?.trim() && e.date)
+
+    if (validEntries.length === 0) return '-'
+
+    // Sort by date ascending (earliest first)
+    const sorted = validEntries.sort((a, b) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    )
+
+    return sorted[0].name.trim()
+  }
+
+  const getBeauticians = (serviceSales: any[], items: any[], topN = 10) => {
+    if ((!serviceSales || serviceSales.length === 0) && (!items || items.length === 0)) {
+      return '-'
+    }
+
+    const beauticiansSet = new Set<string>()
+
+    // Collect beauticians from service_sales
+    serviceSales?.forEach(s => {
+      if (s.sales_person && s.sales_person.trim()) {
+        beauticiansSet.add(s.sales_person.trim())
+      }
+    })
+
+    // Collect beauticians from items
+    items?.forEach(i => {
+      if (i.sales_person && i.sales_person.trim()) {
+        beauticiansSet.add(i.sales_person.trim())
+      }
+    })
+
+    if (beauticiansSet.size === 0) return '-'
+
+    return Array.from(beauticiansSet)
+      .slice(0, topN)
+      .join(', ')
   }
 
   // Data Fetching
@@ -265,9 +331,12 @@ const CustomerReport: React.FC = () => {
 
           // Purchase behavior
           const topServices = getTopServices(customerServiceSales)
+          const onboardingBeautician = getOnboardingBeautician(customerServiceSales, customerItems)
+          const beauticians = getBeauticians(customerServiceSales, customerItems)
 
           // Segmentation
-          const customerSegment = getCustomerSegment(lastVisitDate, totalTransactions)
+          const customerStatus = getCustomerStatus(lastVisitDate, totalTransactions)
+          const customerRank = getCustomerRank(totalRevenue)
 
           return {
             id: customer.id,
@@ -289,8 +358,11 @@ const CustomerReport: React.FC = () => {
             daysSinceLastVisit,
 
             topServices,
+            onboardingBeautician,
+            beauticians,
 
-            customerSegment
+            customerStatus,
+            customerRank
           }
         }) || []
 
@@ -382,13 +454,57 @@ const CustomerReport: React.FC = () => {
     }
   }
 
-  // Segment options
-  const segmentOptions: MultiSelectOption[] = [
+  // Status options
+  const statusOptions: MultiSelectOption[] = [
     { value: 'Active', label: 'Active' },
     { value: 'At Risk', label: 'At Risk' },
     { value: 'Dormant', label: 'Dormant' },
     { value: 'New', label: 'New' }
   ]
+
+  // Rank options
+  const rankOptions: MultiSelectOption[] = [
+    { value: 'CONSULTATION', label: 'Consultation' },
+    { value: 'STARTER', label: 'Starter' },
+    { value: 'BRONZE', label: 'Bronze' },
+    { value: 'SILVER', label: 'Silver' },
+    { value: 'GOLD', label: 'Gold' },
+    { value: 'PLATINUM', label: 'Platinum' }
+  ]
+
+  // Onboarding Beauticians options - dynamically generated from data
+  const onboardingBeauticiansOptions: MultiSelectOption[] = useMemo(() => {
+    const uniqueBeauticians = new Set<string>()
+
+    rawData.forEach(row => {
+      if (row.onboardingBeautician && row.onboardingBeautician !== '-') {
+        uniqueBeauticians.add(row.onboardingBeautician.trim())
+      }
+    })
+
+    return Array.from(uniqueBeauticians)
+      .sort()
+      .map(name => ({ value: name, label: name }))
+  }, [rawData])
+
+  // Beauticians options - dynamically generated from data
+  const beauticiansOptions: MultiSelectOption[] = useMemo(() => {
+    const uniqueBeauticians = new Set<string>()
+
+    rawData.forEach(row => {
+      if (row.beauticians && row.beauticians !== '-') {
+        // Split by comma and extract individual beautician names
+        const names = row.beauticians.split(',').map(n => n.trim())
+        names.forEach(name => {
+          if (name) uniqueBeauticians.add(name)
+        })
+      }
+    })
+
+    return Array.from(uniqueBeauticians)
+      .sort()
+      .map(name => ({ value: name, label: name }))
+  }, [rawData])
 
   // Table columns
   const columns: ColumnDef<CustomerReportRow>[] = useMemo(() => [
@@ -475,6 +591,54 @@ const CustomerReport: React.FC = () => {
       filterFn: 'birthdayBetween',
       meta: {
         filterComponent: BirthdayRangeColumnFilter
+      }
+    },
+    {
+      accessorKey: 'onboardingBeautician',
+      header: () => (
+        <Tooltip content="First beautician/sales person who served this customer" side="bottom">
+          <div className="cursor-help">Onboarding Beautician</div>
+        </Tooltip>
+      ),
+      cell: ({ row }) => {
+        const beautician = row.getValue('onboardingBeautician') as string
+        return (
+          <div className="w-[150px] whitespace-nowrap">
+            {beautician}
+          </div>
+        )
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'arrIncludesSome',
+      meta: {
+        filterComponent: MultiSelectColumnFilter,
+        filterOptions: onboardingBeauticiansOptions
+      }
+    },
+    {
+      accessorKey: 'beauticians',
+      header: () => (
+        <Tooltip content="All beauticians/sales persons who served this customer" side="bottom">
+          <div className="cursor-help">All Beauticians</div>
+        </Tooltip>
+      ),
+      cell: ({ row }) => {
+        const beauticians = row.getValue('beauticians') as string
+        return (
+          <Tooltip content={beauticians}>
+            <div className="max-w-[250px] truncate cursor-help">
+              {beauticians}
+            </div>
+          </Tooltip>
+        )
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'arrIncludesSome',
+      meta: {
+        filterComponent: MultiSelectColumnFilter,
+        filterOptions: beauticiansOptions
       }
     },
     // Visit Metrics
@@ -630,27 +794,27 @@ const CustomerReport: React.FC = () => {
       enableSorting: true,
     },
     {
-      accessorKey: 'customerSegment',
+      accessorKey: 'customerStatus',
       header: () => (
         <Tooltip content="Active (≤90 days), At Risk (91-180 days), Dormant (>180 days), New (no visits)" side="bottom">
-          <div className="cursor-help">Segment</div>
+          <div className="cursor-help">Status</div>
         </Tooltip>
       ),
       cell: ({ row }) => {
-        const segment = row.getValue('customerSegment') as string
-        const variantMap: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-          'Active': 'default',
-          'At Risk': 'secondary',
-          'Dormant': 'destructive',
-          'New': 'outline'
+        const status = row.getValue('customerStatus') as string
+        const colorMap: Record<string, string> = {
+          'Active': 'bg-green-100 text-green-800 border-green-200 dark:bg-green-950 dark:text-green-200 dark:border-green-800',
+          'At Risk': 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-200 dark:border-yellow-800',
+          'Dormant': 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-200 dark:border-red-800',
+          'New': 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
         }
         return (
           <div className="w-24">
             <Badge
-              variant={variantMap[segment] || 'outline'}
-              className="text-xs whitespace-nowrap"
+              variant="outline"
+              className={`text-xs whitespace-nowrap ${colorMap[status] || ''}`}
             >
-              {segment}
+              {status}
             </Badge>
           </div>
         )
@@ -660,42 +824,100 @@ const CustomerReport: React.FC = () => {
       filterFn: 'arrIncludesSome',
       meta: {
         filterComponent: MultiSelectColumnFilter,
-        filterOptions: segmentOptions
+        filterOptions: statusOptions
       }
     },
-  ], [expandedRows])
+    {
+      accessorKey: 'customerRank',
+      header: () => (
+        <Tooltip content="Customer tier based on lifetime spending" side="bottom">
+          <div className="cursor-help">Rank</div>
+        </Tooltip>
+      ),
+      cell: ({ row }) => {
+        const rank = row.getValue('customerRank') as string
+        const rankStyles: Record<string, { className: string }> = {
+          'CONSULTATION': { className: 'border-slate-400 text-slate-600 bg-slate-50' },
+          'STARTER': { className: 'border-green-500 text-green-700 bg-green-50' },
+          'BRONZE': { className: 'border-amber-600 text-amber-700 bg-amber-50' },
+          'SILVER': { className: 'border-gray-500 text-gray-700 bg-gray-50' },
+          'GOLD': { className: 'border-yellow-600 text-yellow-700 bg-yellow-50' },
+          'PLATINUM': { className: 'border-blue-600 text-blue-700 bg-blue-50' }
+        }
+        return (
+          <div className="w-28">
+            <Badge
+              variant="outline"
+              className={`text-xs whitespace-nowrap ${rankStyles[rank]?.className || ''}`}
+            >
+              {rank}
+            </Badge>
+          </div>
+        )
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: 'arrIncludesSome',
+      meta: {
+        filterComponent: MultiSelectColumnFilter,
+        filterOptions: rankOptions
+      }
+    },
+  ], [expandedRows, onboardingBeauticiansOptions, beauticiansOptions])
 
   // Export columns (all available columns)
   // Using proportional widths that auto-scale to fit page width
   // Grouped by category: Customer Info → Visit Metrics → Transaction Metrics → Purchase Behavior → Segmentation
-  const exportColumns: ExportColumn[] = [
+  const exportColumns: ExportColumn[] = useMemo(() => [
     // Customer Info
-    { header: 'Membership ID', accessor: 'membershipNumber', width: 20 },
-    { header: 'Customer Name', accessor: 'customerName', width: 55 },
-    { header: 'Phone', accessor: 'customerPhone', width: 35 },
-    { header: 'Birthday', accessor: (row: CustomerReportRow) => row.customerBirthday ? formatDate(row.customerBirthday) : '-', width: 25 },
+    { header: 'Membership ID', accessor: 'membershipNumber', type: 'text' },
+    { header: 'Customer Name', accessor: 'customerName', type: 'text' },
+    { header: 'Phone', accessor: 'customerPhone', type: 'text' },
+    { header: 'Birthday', accessor: (row: CustomerReportRow) => row.customerBirthday ? formatDate(row.customerBirthday) : '-', type: 'date' },
+    { header: 'Onboarding Beautician', accessor: 'onboardingBeautician', type: 'text' },
+    { header: 'All Beauticians', accessor: 'beauticians', type: 'text' },
     // Visit Metrics
-    { header: 'Total Visits', accessor: 'totalTransactions', width: 22 },
-    { header: 'First Visit', accessor: (row: CustomerReportRow) => row.firstVisitDate ? formatDate(row.firstVisitDate) : '-', width: 25 },
-    { header: 'Last Visit', accessor: (row: CustomerReportRow) => row.lastVisitDate ? formatDate(row.lastVisitDate) : '-', width: 25 },
-    { header: 'Days Since Visit', accessor: (row: CustomerReportRow) => row.daysSinceLastVisit !== null ? row.daysSinceLastVisit.toString() : '-', width: 28 },
+    { header: 'Total Visits', accessor: 'totalTransactions', type: 'number' },
+    { header: 'First Visit', accessor: (row: CustomerReportRow) => row.firstVisitDate ? formatDate(row.firstVisitDate) : '-', type: 'date' },
+    { header: 'Last Visit', accessor: (row: CustomerReportRow) => row.lastVisitDate ? formatDate(row.lastVisitDate) : '-', type: 'date' },
+    { header: 'Days Since Visit', accessor: (row: CustomerReportRow) => row.daysSinceLastVisit !== null ? row.daysSinceLastVisit.toString() : '-', type: 'number' },
     // Transaction Metrics
-    { header: 'Total Revenue', accessor: (row: CustomerReportRow) => formatCurrency(row.totalRevenue), width: 30 },
-    { header: 'Avg Transaction', accessor: (row: CustomerReportRow) => formatCurrency(row.avgTransactionAmount), width: 30 },
+    { header: 'Total Revenue', accessor: (row: CustomerReportRow) => formatCurrency(row.totalRevenue), type: 'currency' },
+    { header: 'Avg Transaction', accessor: (row: CustomerReportRow) => formatCurrency(row.avgTransactionAmount), type: 'currency' },
     // Purchase Behavior
-    { header: 'Total Services', accessor: 'totalServices', width: 22 },
-    { header: 'Total Items', accessor: 'totalItems', width: 22 },
-    { header: 'Top Services', accessor: 'topServices', width: 70 },
+    { header: 'Total Services', accessor: 'totalServices', type: 'number' },
+    { header: 'Total Items', accessor: 'totalItems', type: 'number' },
+    { header: 'Top Services', accessor: 'topServices', width: 28, type: 'text' },
     // Segmentation
-    { header: 'Segment', accessor: 'customerSegment', width: 25 },
-  ]
+    { header: 'Status', accessor: 'customerStatus', type: 'text' },
+    { header: 'Rank', accessor: 'customerRank', width: 26, type: 'text' },
+  ], [])
 
   // Column options for selection modal
-  const columnOptions: ColumnOption[] = exportColumns.map((col, index) => ({
-    id: index.toString(),
-    label: col.header,
-    required: col.header === 'Customer Name' // Make customer name required
-  }))
+  const columnOptions: ColumnOption[] = useMemo(() =>
+    exportColumns.map((col, index) => ({
+      id: index.toString(),
+      label: col.header,
+      required: col.header === 'Customer Name' // Make customer name required
+    })),
+    [exportColumns]
+  )
+
+  // Available filename tokens
+  const availableFilenameTokens: FilenameToken[] = [
+    // Date tokens
+    { value: '[Current Date]', label: 'Current Date', type: 'date' },
+    { value: '[Year]', label: 'Year', type: 'date' },
+    { value: '[Month]', label: 'Month', type: 'date' },
+    // Static tokens
+    { value: '[Report Type]', label: 'Report Type (Customer Report)', type: 'static' },
+    // Column tokens - all exportable columns
+    ...exportColumns.map(col => ({
+      value: `[${col.header}]`,
+      label: col.header,
+      type: 'column' as const
+    }))
+  ]
 
   // Expanded row renderer
   const renderExpandedRow = (row: CustomerReportRow) => {
@@ -739,15 +961,64 @@ const CustomerReport: React.FC = () => {
     setIsColumnModalOpen(true)
   }
 
-  const handleColumnSelectionConfirm = (selectedColumnIds: string[]) => {
+  const handleColumnSelectionConfirm = (selectedColumnIds: string[], customFilename: string) => {
     if (!pendingExportFormat) return
 
-    const filename = `customer-report-${new Date().toISOString().split('T')[0]}`
-    const title = 'Customer Report - Ainaa Clinic'
-
+    // Get filtered data first to extract column values
     const filteredData = tableInstance
       ? tableInstance.getFilteredRowModel().rows.map((row: any) => row.original)
       : rawData
+
+    // Process filename with token replacements
+    const now = new Date()
+    const year = now.getFullYear().toString()
+    const month = (now.getMonth() + 1).toString().padStart(2, '0')
+    const currentDate = now.toISOString().split('T')[0]
+
+    let processedFilename = customFilename
+
+    // Replace column tokens with actual values from filtered data
+    exportColumns.forEach((col) => {
+      const columnHeader = col.header
+      if (processedFilename.includes(columnHeader)) {
+        const accessor = col.accessor
+        const uniqueValues = new Set<string>()
+
+        filteredData.forEach((row: CustomerReportRow) => {
+          let value
+          if (typeof accessor === 'function') {
+            value = accessor(row)
+          } else {
+            value = row[accessor as keyof CustomerReportRow]
+          }
+          if (value && value !== '-' && value !== 'N/A' && value !== '') {
+            uniqueValues.add(value.toString())
+          }
+        })
+
+        // Limit to 5 unique values to prevent extremely long filenames
+        const values = Array.from(uniqueValues).slice(0, 5)
+        if (values.length > 0) {
+          processedFilename = processedFilename.replace(columnHeader, values.join('-'))
+        } else {
+          // If no values found, remove the token
+          processedFilename = processedFilename.replace(columnHeader, 'All')
+        }
+      }
+    })
+
+    // Replace date and static tokens
+    processedFilename = processedFilename
+      .replace(/Current Date/g, currentDate)
+      .replace(/Year/g, year)
+      .replace(/Month/g, month)
+      .replace(/Report Type \(Customer Report\)/g, 'Customer-Report')
+      .replace(/Report Type/g, 'Customer-Report')
+      // Sanitize filename
+      .replace(/[\/\\:*?"<>|]/g, '')
+
+    // Use processed filename as title (replace hyphens with spaces for readability)
+    const title = processedFilename.replace(/-/g, ' ')
 
     // Filter columns based on selection
     const selectedColumns = exportColumns.filter((_, index) =>
@@ -755,7 +1026,7 @@ const CustomerReport: React.FC = () => {
     )
 
     exportData(pendingExportFormat, {
-      filename,
+      filename: processedFilename,
       title,
       columns: selectedColumns,
       data: filteredData,
@@ -811,16 +1082,34 @@ const CustomerReport: React.FC = () => {
                 column={tableInstance.getColumn('customerPhone')!}
                 placeholder="Phone Number"
               />
+              <MultiSelectColumnFilter
+                key={`onboarding-beautician-filter-${tableInstance.id}`}
+                column={tableInstance.getColumn('onboardingBeautician')!}
+                options={onboardingBeauticiansOptions}
+                placeholder="Onboarding Beautician"
+              />
+              <MultiSelectColumnFilter
+                key={`beauticians-filter-${tableInstance.id}`}
+                column={tableInstance.getColumn('beauticians')!}
+                options={beauticiansOptions}
+                placeholder="All Beauticians"
+              />
               <BirthdayRangeColumnFilter
                 key={`birthday-filter-${tableInstance.id}`}
                 column={tableInstance.getColumn('customerBirthday')!}
                 placeholder="Birthday"
               />
               <MultiSelectColumnFilter
-                key={`segment-filter-${tableInstance.id}`}
-                column={tableInstance.getColumn('customerSegment')!}
-                options={segmentOptions}
-                placeholder="Customer Segment"
+                key={`status-filter-${tableInstance.id}`}
+                column={tableInstance.getColumn('customerStatus')!}
+                options={statusOptions}
+                placeholder="Customer Status"
+              />
+              <MultiSelectColumnFilter
+                key={`rank-filter-${tableInstance.id}`}
+                column={tableInstance.getColumn('customerRank')!}
+                options={rankOptions}
+                placeholder="Customer Rank"
               />
               <NumberRangeColumnFilter
                 key={`revenue-filter-${tableInstance.id}`}
@@ -887,6 +1176,8 @@ const CustomerReport: React.FC = () => {
         onConfirm={handleColumnSelectionConfirm}
         columns={columnOptions}
         title="Select Columns to Export"
+        availableTokens={availableFilenameTokens}
+        tableInstance={tableInstance}
       />
     </Layout>
   )

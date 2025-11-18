@@ -87,7 +87,7 @@ const TransactionReport: React.FC = () => {
               customer_id,
               customers!inner (
                 name,
-                contact_number,
+                phone,
                 date_of_birth
               )
             `)
@@ -122,7 +122,7 @@ const TransactionReport: React.FC = () => {
               service_name,
               sales_person,
               discount_amount,
-              payment_mode,
+              payment_method,
               is_cancelled
             `)
             .range(start, start + pageSize - 1)
@@ -151,7 +151,8 @@ const TransactionReport: React.FC = () => {
             .select(`
               transaction_id,
               item_name,
-              sales_person
+              sales_person,
+              payment_method
             `)
             .range(start, start + pageSize - 1)
 
@@ -174,6 +175,42 @@ const TransactionReport: React.FC = () => {
           if (itemsWithSalesPerson.length > 0) {
             console.log('🔍 Sample item with sales_person:', itemsWithSalesPerson[0])
           }
+        }
+
+        // ===== FETCH ALL PAYMENTS (OPTIONAL - table may not exist yet) =====
+        let allPayments: any[] = []
+        start = 0
+        hasMore = true
+
+        try {
+          while (hasMore) {
+            const { data: payments, error } = await supabase
+              .from('payments')
+              .select(`
+                transaction_id,
+                payment_method,
+                payment_amount
+              `)
+              .range(start, start + pageSize - 1)
+
+            if (error) {
+              console.warn('⚠️ Payments table not accessible (table may not exist yet):', error.message)
+              break
+            }
+
+            if (payments && payments.length > 0) {
+              allPayments = [...allPayments, ...payments]
+              start += pageSize
+              hasMore = payments.length === pageSize
+            } else {
+              hasMore = false
+            }
+          }
+
+          console.log(`  - Fetched ${allPayments.length} payments`)
+        } catch (err) {
+          console.warn('⚠️ Could not fetch payments (table may not exist yet)')
+          allPayments = []
         }
 
         // ===== GROUP SERVICE SALES BY TRANSACTION =====
@@ -200,10 +237,23 @@ const TransactionReport: React.FC = () => {
           }
         })
 
+        // ===== GROUP PAYMENTS BY TRANSACTION =====
+        const paymentsByTx = new Map<string, any[]>()
+        allPayments.forEach((payment) => {
+          const txId = payment.transaction_id
+          if (txId) {
+            if (!paymentsByTx.has(txId)) {
+              paymentsByTx.set(txId, [])
+            }
+            paymentsByTx.get(txId)!.push(payment)
+          }
+        })
+
         // ===== BUILD REPORT ROWS FROM TRANSACTIONS =====
         const reportRows: ReportRow[] = allTransactions.map((tx) => {
           const services = serviceSalesByTx.get(tx.id) || []
           const items = itemsByTx.get(tx.id) || []
+          const payments = paymentsByTx.get(tx.id) || []
 
           // Determine type: has both, only services, or only items
           let type: 'service' | 'item' = 'service'
@@ -230,8 +280,15 @@ const TransactionReport: React.FC = () => {
             })
           }
 
-          // Get payment method and discount from services (if any)
-          const paymentMethod = services.length > 0 ? (services[0].payment_mode || '-') : '-'
+          // Get payment method with fallback: service_sales.payment_method → items.payment_method → payments.payment_method → '-'
+          const paymentMethod =
+            (services.length > 0 && services[0].payment_method)
+              ? services[0].payment_method
+              : (items.length > 0 && items[0].payment_method)
+                ? items[0].payment_method
+                : (payments.length > 0 && payments[0].payment_method)
+                  ? payments[0].payment_method
+                  : '-'
           const totalDiscount = services.reduce((sum, s) => sum + (s.discount_amount || 0), 0)
 
           // Check if any service is cancelled
@@ -244,7 +301,7 @@ const TransactionReport: React.FC = () => {
             customerId: tx.customer_id || '',
             date: tx.transaction_date || '',
             customerName: tx.customers?.name || 'Unknown',
-            customerPhone: tx.customers?.contact_number || '-',
+            customerPhone: tx.customers?.phone || '-',
             customerBirthday: tx.customers?.date_of_birth || null,
             items: allItemsAndServices.join(', ') || '-',
             beautician: allSalesPersons.join(', ') || '-',

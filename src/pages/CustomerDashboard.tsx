@@ -32,7 +32,11 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Search
+  Search,
+  ClipboardList,
+  Sparkles,
+  Crown,
+  Gem
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -471,6 +475,34 @@ const CustomerDashboard: React.FC = () => {
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 
+  const getCustomerRank = (totalSpent: number): 'CONSULTATION' | 'STARTER' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' => {
+    if (totalSpent <= 50) return 'CONSULTATION'
+    if (totalSpent <= 499) return 'STARTER'
+    if (totalSpent <= 1999) return 'BRONZE'
+    if (totalSpent <= 4999) return 'SILVER'
+    if (totalSpent <= 7999) return 'GOLD'
+    return 'PLATINUM'
+  }
+
+  const getRankBadge = (rank: string) => {
+    const rankConfig: Record<string, { icon: any, className: string }> = {
+      'CONSULTATION': { icon: ClipboardList, className: 'border-slate-400 text-slate-600 bg-slate-50' },
+      'STARTER': { icon: Sparkles, className: 'border-green-500 text-green-600 bg-green-50' },
+      'BRONZE': { icon: Award, className: 'border-amber-600 text-amber-700 bg-amber-50' },
+      'SILVER': { icon: Award, className: 'border-gray-500 text-gray-700 bg-gray-50' },
+      'GOLD': { icon: Crown, className: 'border-yellow-600 text-yellow-700 bg-yellow-50' },
+      'PLATINUM': { icon: Gem, className: 'border-blue-600 text-blue-700 bg-blue-50' }
+    }
+    const config = rankConfig[rank] || rankConfig['CONSULTATION']
+    const Icon = config.icon
+    return (
+      <Badge variant="outline" className={config.className}>
+        <Icon className="h-3 w-3 mr-1" />
+        {rank}
+      </Badge>
+    )
+  }
+
   // Calculate stats from data with fallbacks
   const calculateTotalSpent = () => {
     if (visitFrequency?.total_spent) return visitFrequency.total_spent
@@ -616,12 +648,7 @@ const CustomerDashboard: React.FC = () => {
                 </div>
 
                 <div className="flex gap-2">
-                  {customer.vip && (
-                    <Badge className="bg-primary text-primary-foreground border-0">
-                      <Award className="h-3 w-3 mr-1" />
-                      VIP
-                    </Badge>
-                  )}
+                  {getRankBadge(getCustomerRank(stats.totalSpent))}
                   {visitFrequency?.is_active && (
                     <Badge variant="outline" className="border-green-500 text-green-600">
                       Active

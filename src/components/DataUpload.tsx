@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
-import { Upload, Download, CheckCircle2, AlertCircle, Loader2, Database } from 'lucide-react'
+import { Upload, Download, CheckCircle2, Database, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { UploadProgressModal } from '@/components/ui/UploadProgressModal'
 import {
   processAndUploadData,
   startLogCapture,
@@ -93,6 +93,7 @@ export const DataUpload: React.FC = () => {
     message: string
     stats?: any
   } | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const allFilesSelected = Object.values(files).every((file) => file !== null)
 
@@ -105,6 +106,7 @@ export const DataUpload: React.FC = () => {
     setUploading(true)
     setProgress(null)
     setResult(null)
+    setIsModalOpen(true) // Open modal when upload starts
 
     // Start capturing logs
     startLogCapture()
@@ -126,7 +128,13 @@ export const DataUpload: React.FC = () => {
       setResult({
         success: uploadResult.success,
         message: uploadResult.message,
-        stats: uploadResult.stats,
+        stats: uploadResult.stats ? {
+          customers: uploadResult.stats.customersInserted || 0,
+          transactions: uploadResult.stats.transactionsInserted || 0,
+          payments: uploadResult.stats.paymentsInserted || 0,
+          items: uploadResult.stats.itemsInserted || 0,
+          serviceSales: uploadResult.stats.enhancedItemsInserted || 0,
+        } : undefined,
       })
     } catch (error) {
       console.error('Upload error:', error)
@@ -151,6 +159,11 @@ export const DataUpload: React.FC = () => {
     })
     setProgress(null)
     setResult(null)
+    setIsModalOpen(false)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
   }
 
   return (
@@ -268,106 +281,14 @@ export const DataUpload: React.FC = () => {
         </div>
       </Card>
 
-      {/* Progress Card */}
-      {progress && (
-        <Card className="p-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground">{progress.step}</h3>
-              <span className="text-sm font-medium text-foreground/70">
-                {progress.percentage}%
-              </span>
-            </div>
-
-            <Progress value={progress.percentage} className="h-3" />
-
-            <div className="flex items-center gap-2 text-sm text-foreground/70">
-              {progress.percentage === 100 ? (
-                <CheckCircle2 className="text-success" size={16} />
-              ) : (
-                <Loader2 className="animate-spin" size={16} />
-              )}
-              <span>{progress.message}</span>
-            </div>
-
-            <div className="text-xs text-muted-foreground">
-              Progress: {progress.current} / {progress.total}
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Result Card */}
-      {result && (
-        <Card
-          className={`p-6 border-2 ${
-            result.success
-              ? 'border-green-200 bg-green-50'
-              : 'border-red-200 bg-red-50'
-          }`}
-        >
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              {result.success ? (
-                <CheckCircle2 className="text-green-600 flex-shrink-0" size={24} />
-              ) : (
-                <AlertCircle className="text-red-600 flex-shrink-0" size={24} />
-              )}
-              <div className="flex-1">
-                <h3
-                  className={`text-lg font-semibold ${
-                    result.success ? 'text-green-900' : 'text-red-900'
-                  }`}
-                >
-                  {result.success ? 'Upload Successful' : 'Upload Failed'}
-                </h3>
-                <p
-                  className={`text-sm mt-1 ${
-                    result.success ? 'text-green-700' : 'text-red-700'
-                  }`}
-                >
-                  {result.message}
-                </p>
-              </div>
-            </div>
-
-            {result.success && result.stats && (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-green-200">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-900">
-                    {result.stats.customersInserted.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-green-600 mt-1">Customers</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-900">
-                    {result.stats.transactionsInserted.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-green-600 mt-1">Transactions</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-900">
-                    {result.stats.paymentsInserted.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-green-600 mt-1">Payments</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-900">
-                    {result.stats.itemsInserted.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-green-600 mt-1">Items</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-900">
-                    {result.stats.enhancedItemsInserted.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-green-600 mt-1">Enhanced Items</div>
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
+      {/* Upload Progress Modal */}
+      <UploadProgressModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        progress={progress}
+        result={result}
+        uploading={uploading}
+      />
     </PageContainer>
   )
 }

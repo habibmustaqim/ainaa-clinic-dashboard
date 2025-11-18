@@ -228,6 +228,7 @@ export interface RawItemRow {
   'Total Price'?: string | number
   'Category'?: string
   'Type'?: string
+  'Payment Mode'?: string
   [key: string]: any
 }
 
@@ -302,6 +303,17 @@ export function cleanItemRow(
     ''
   ).toString().trim() || null
 
+  // Extract payment method from column AG (actual Excel header name: 'Payment Mode')
+  const paymentMethod = (
+    raw['Payment Mode'] ||        // Primary: actual Excel header name
+    raw['Payment'] ||
+    raw['Payment '] ||
+    raw[' Payment'] ||
+    raw['Payment Method'] ||
+    raw['Method'] ||
+    ''
+  ).toString().trim() || null
+
   return {
     transaction_id: transactionId,
     item_name: itemName,
@@ -310,7 +322,8 @@ export function cleanItemRow(
     total_price: totalPrice || (unitPrice * quantity),
     category: raw['Category']?.toString().trim() || raw['Type']?.toString().trim() || null,
     sale_date: parseExcelDate(raw['Date']),
-    sales_person: salesPerson
+    sales_person: salesPerson,
+    payment_method: paymentMethod
   }
 }
 

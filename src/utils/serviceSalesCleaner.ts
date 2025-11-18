@@ -509,7 +509,14 @@ export function cleanServiceSalesRow(
     raw['Payment Outstanding'] ||
     0
   )
-  const paymentMode = cleanString(raw['Payment Mode'])
+  const paymentMethod = cleanString(
+    raw['Payment Mode'] ||        // Primary: actual Excel header name
+    raw['Payment'] ||
+    raw['Payment '] ||
+    raw[' Payment'] ||
+    raw['Payment Method'] ||
+    raw['Method']
+  )
   const paymentType = cleanString(raw['Payment Type'])
   const approvalCode = cleanString(raw['Approval Code'])
   const bank = cleanString(raw['Bank'])
@@ -571,7 +578,7 @@ export function cleanServiceSalesRow(
     is_cancelled: isCancelled,
     payment_amount: paymentAmount,
     payment_outstanding: paymentOutstanding,
-    payment_mode: paymentMode || null,
+    payment_method: paymentMethod || null,
     payment_type: paymentType || null,
     approval_code: approvalCode || null,
     bank: bank || null,
