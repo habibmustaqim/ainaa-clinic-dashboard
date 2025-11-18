@@ -113,6 +113,7 @@ export interface Item {
   total_price: number
   category: string | null
   sale_date: string | null
+  sales_person: string | null
   created_at: string
 }
 

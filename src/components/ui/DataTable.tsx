@@ -43,6 +43,9 @@ export interface DataTableProps<TData> {
   showColumnFilters?: boolean
   filterFns?: Record<string, FilterFn<TData>>
   onTableChange?: (table: any) => void
+  renderExpandedRow?: (row: TData) => React.ReactNode
+  expandedRows?: Set<string>
+  getRowId?: (row: TData) => string
 }
 
 export function DataTable<TData>({
@@ -56,6 +59,9 @@ export function DataTable<TData>({
   showColumnFilters = false,
   filterFns,
   onTableChange,
+  renderExpandedRow,
+  expandedRows,
+  getRowId,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -87,7 +93,7 @@ export function DataTable<TData>({
     if (onTableChange) {
       onTableChange(table)
     }
-  }, [table, onTableChange])
+  }, [table, onTableChange, columnFilters, sorting, pagination])
 
   const getSortIcon = (isSorted: false | 'asc' | 'desc') => {
     if (isSorted === 'asc') {
@@ -162,22 +168,35 @@ export function DataTable<TData>({
             </TableHeader>
             <TableBody>
               {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() && 'selected'}
-                    className="hover:bg-muted/50 transition-colors"
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
+                table.getRowModel().rows.map((row) => {
+                  const rowId = getRowId ? getRowId(row.original) : row.id
+                  const isExpanded = expandedRows?.has(rowId)
+
+                  return (
+                    <React.Fragment key={row.id}>
+                      <TableRow
+                        data-state={row.getIsSelected() && 'selected'}
+                        className="hover:bg-muted/50 transition-colors"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                      {isExpanded && renderExpandedRow && (
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableCell colSpan={columns.length} className="p-4">
+                            {renderExpandedRow(row.original)}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  )
+                })
               ) : (
                 <TableRow>
                   <TableCell

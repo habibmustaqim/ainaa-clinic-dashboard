@@ -357,6 +357,7 @@ interface CountUpProps {
 
 const CountUp: React.FC<CountUpProps> = ({ value, duration = 1.5 }) => {
   const [displayValue, setDisplayValue] = React.useState<string | number>(0)
+  const previousValueRef = React.useRef<number>(0)
 
   React.useEffect(() => {
     // Handle string values (like currency with RM prefix)
@@ -369,7 +370,8 @@ const CountUp: React.FC<CountUpProps> = ({ value, duration = 1.5 }) => {
     }
 
     const startTime = Date.now()
-    const startValue = 0
+    // Start from previous value for smooth transitions
+    const startValue = previousValueRef.current
 
     const animate = () => {
       const now = Date.now()
@@ -401,6 +403,9 @@ const CountUp: React.FC<CountUpProps> = ({ value, duration = 1.5 }) => {
 
       if (progress < 1) {
         requestAnimationFrame(animate)
+      } else {
+        // Update ref with final value for next animation
+        previousValueRef.current = numericValue
       }
     }
 

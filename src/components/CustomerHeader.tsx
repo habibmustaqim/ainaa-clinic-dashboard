@@ -4,30 +4,13 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Customer } from '@/lib/supabase'
+import { formatDate, getInitials } from '@/utils/formatters'
 
 interface CustomerHeaderProps {
   customer: Customer
 }
 
 const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
-  }
-
-  const formatDate = (date: string | null) => {
-    if (!date) return 'N/A'
-    return new Date(date).toLocaleDateString('en-MY', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
-
   const getGenderBadgeColor = (gender: string | null) => {
     if (!gender) return 'outline'
     switch (gender.toLowerCase()) {

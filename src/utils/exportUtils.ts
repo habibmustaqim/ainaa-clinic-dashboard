@@ -122,24 +122,29 @@ export const exportToPDF = ({ filename, columns, data, title }: ExportOptions) =
       head: [headers],
       body: body,
       startY: title ? 25 : 15,
+      tableWidth: doc.internal.pageSize.getWidth() - 12,
       styles: {
         fontSize: 8,
-        cellPadding: 2,
+        cellPadding: 1.5,
+        overflow: 'linebreak',
       },
       headStyles: {
         fillColor: [47, 64, 119], // Primary color from theme
         textColor: [255, 255, 255],
         fontStyle: 'bold',
-        halign: 'left'
+        halign: 'left',
+        fontSize: 8
       },
       alternateRowStyles: {
         fillColor: [245, 245, 245] // Light gray for alternate rows
       },
-      margin: { top: 15, right: 10, bottom: 10, left: 10 },
+      margin: { top: 15, right: 6, bottom: 10, left: 6 },
       theme: 'grid',
       columnStyles: columns.reduce((acc, col, index) => {
         if (col.width) {
           acc[index] = { cellWidth: col.width }
+        } else {
+          acc[index] = { cellWidth: 'auto' }
         }
         return acc
       }, {} as any)
@@ -158,14 +163,15 @@ export const exportToPDF = ({ filename, columns, data, title }: ExportOptions) =
         { align: 'center' }
       )
 
-      // Add generation date
-      const dateStr = new Date().toLocaleDateString('en-MY', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+      // Add generation date in DD-MM-YYYY HH:mm:ss format
+      const now = new Date()
+      const day = String(now.getDate()).padStart(2, '0')
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const year = now.getFullYear()
+      const hours = String(now.getHours()).padStart(2, '0')
+      const minutes = String(now.getMinutes()).padStart(2, '0')
+      const seconds = String(now.getSeconds()).padStart(2, '0')
+      const dateStr = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`
       doc.text(
         `Generated: ${dateStr}`,
         14,

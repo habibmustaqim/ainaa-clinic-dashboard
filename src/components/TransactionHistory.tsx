@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { supabase, Transaction } from '@/lib/supabase'
+import { formatDate, formatCurrency } from '@/utils/formatters'
 
 interface TransactionItem {
   id: string
@@ -44,21 +45,6 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [loadingItems, setLoadingItems] = useState<Record<string, boolean>>({})
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
-
-  const formatCurrency = (amount: number) => {
-    return `RM ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  }
-
-  const formatDate = (date: string | null) => {
-    if (!date) return 'N/A'
-    return new Date(date).toLocaleDateString('en-MY', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
 
   const getPaymentStatusBadge = (status: string | null) => {
     const statusMap: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', label: string }> = {
@@ -140,7 +126,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                 >
                   <div className="flex-1 grid grid-cols-6 gap-4 items-center">
                     <div>
-                      <div className="text-sm font-medium">{formatDate(transaction.transaction_date)}</div>
+                      <div className="text-sm font-medium">{formatDate(transaction.transaction_date, 'datetime')}</div>
                       <div className="text-xs text-gray-500">{transaction.so_number}</div>
                     </div>
                     <div className="text-sm">{transaction.transaction_type || 'N/A'}</div>

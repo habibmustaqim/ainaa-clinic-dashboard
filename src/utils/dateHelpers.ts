@@ -90,16 +90,16 @@ export function formatDateRange(range: DateRange): string {
 
   if (!range.from || !range.to) return 'All Time'
 
-  const fromStr = range.from.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
-  const toStr = range.to.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
+  // Format dates as DD-MM-YYYY
+  const formatDate = (date: Date): string => {
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const year = date.getFullYear()
+    return `${day}-${month}-${year}`
+  }
+
+  const fromStr = formatDate(range.from)
+  const toStr = formatDate(range.to)
 
   return `${fromStr} - ${toStr}`
 }

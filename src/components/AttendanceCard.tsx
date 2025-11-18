@@ -2,6 +2,7 @@ import React from 'react'
 import { Calendar, Clock, TrendingUp, Activity } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { formatDate } from '@/utils/formatters'
 
 interface AttendanceStats {
   totalVisits: number
@@ -17,15 +18,6 @@ interface AttendanceCardProps {
 }
 
 const AttendanceCard: React.FC<AttendanceCardProps> = ({ stats, loading = false }) => {
-  const formatDate = (date: string | null) => {
-    if (!date) return 'No visits recorded'
-    return new Date(date).toLocaleDateString('en-MY', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
   const getFrequencyBadge = (frequency: string) => {
     const frequencyMap: Record<string, { variant: 'default' | 'secondary' | 'outline', color: string }> = {
       'High': { variant: 'default', color: 'text-green-600' },
@@ -97,7 +89,7 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ stats, loading = false 
             <div className="flex-1">
               <div className="text-sm text-gray-600">Last Visit</div>
               <div className="text-base font-semibold text-gray-900">
-                {formatDate(stats.lastVisitDate)}
+                {stats.lastVisitDate ? formatDate(stats.lastVisitDate) : 'No visits recorded'}
               </div>
               {daysSince && (
                 <div className="text-xs text-gray-500 mt-1">

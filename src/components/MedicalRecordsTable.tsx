@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { formatDate } from '@/utils/formatters'
 
 interface MedicalRecord {
   id: string
@@ -33,14 +34,6 @@ const MedicalRecordsTable: React.FC<MedicalRecordsTableProps> = ({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [searchTerm, setSearchTerm] = useState('')
   const itemsPerPage = 5
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-MY', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
 
   const getStatusBadge = (status: string | undefined) => {
     const statusMap: Record<string, { variant: 'default' | 'secondary' | 'outline', label: string }> = {

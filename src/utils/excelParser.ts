@@ -293,6 +293,15 @@ export function cleanItemRow(
     raw['Net']
   )
 
+  // Extract sales person from column AL (38th column)
+  const salesPerson = (
+    raw['Sales Person'] ||
+    raw['Beautician'] ||
+    raw['Staff'] ||
+    raw['Therapist'] ||
+    ''
+  ).toString().trim() || null
+
   return {
     transaction_id: transactionId,
     item_name: itemName,
@@ -300,7 +309,8 @@ export function cleanItemRow(
     unit_price: unitPrice,
     total_price: totalPrice || (unitPrice * quantity),
     category: raw['Category']?.toString().trim() || raw['Type']?.toString().trim() || null,
-    sale_date: parseExcelDate(raw['Date'])
+    sale_date: parseExcelDate(raw['Date']),
+    sales_person: salesPerson
   }
 }
 

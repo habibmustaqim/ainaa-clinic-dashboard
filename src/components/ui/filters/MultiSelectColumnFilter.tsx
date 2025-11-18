@@ -25,7 +25,15 @@ export function MultiSelectColumnFilter<TData>({
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const columnFilterValue = column.getFilterValue() as string[] | undefined
-  const selected = columnFilterValue || []
+  // Use local state for optimistic UI updates
+  const [optimisticSelected, setOptimisticSelected] = useState<string[]>(columnFilterValue || [])
+
+  // Sync local state when column filter changes from external sources
+  useEffect(() => {
+    setOptimisticSelected(columnFilterValue || [])
+  }, [columnFilterValue])
+
+  const selected = optimisticSelected
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -47,16 +55,22 @@ export function MultiSelectColumnFilter<TData>({
       ? selected.filter(v => v !== value)
       : [...selected, value]
 
+    // Update optimistic state immediately for instant UI feedback
+    setOptimisticSelected(newSelected)
+    // Then update the actual filter (async)
     column.setFilterValue(newSelected.length > 0 ? newSelected : undefined)
   }
 
   const clearAll = () => {
+    setOptimisticSelected([])
     column.setFilterValue(undefined)
     setIsOpen(false)
   }
 
   const selectAll = () => {
-    column.setFilterValue(filteredOptions.map(opt => opt.value))
+    const allValues = filteredOptions.map(opt => opt.value)
+    setOptimisticSelected(allValues)
+    column.setFilterValue(allValues)
   }
 
   return (

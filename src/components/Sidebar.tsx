@@ -64,10 +64,10 @@ export const Sidebar: React.FC = () => {
             isActive={isActive('/')}
           />
           <NavLink
-            to="/reporting"
+            to="/report/transaction"
             icon={<FileText size={20} />}
-            label="Reporting"
-            isActive={isActive('/reporting')}
+            label="Transaction Report"
+            isActive={isActive('/report/transaction')}
           />
           <NavLink
             to="/upload"
