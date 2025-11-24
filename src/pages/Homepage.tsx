@@ -5,7 +5,8 @@ import {
   Package,
   Award,
   Users,
-  ShoppingBag
+  ShoppingBag,
+  CreditCard
 } from 'lucide-react'
 import { supabase, Customer } from '@/lib/supabase'
 import { useCustomer } from '@/context/CustomerContext'
@@ -20,6 +21,7 @@ import { PageContainer, PageHeader } from '@/components/layout/index'
 import { Layout } from '@/components/Layout'
 import { RankedListCard, RankedItemData, SortToggle } from '@/components/ui/RankedListCard'
 import { SalespersonLeaderboard } from '@/components/SalespersonLeaderboard'
+import { GradientPieChart, GradientBarChart } from '@/components/ui/gradient-chart'
 
 interface TopCustomer {
   id: string
@@ -230,12 +232,18 @@ const Homepage: React.FC = () => {
   const [topItems, setTopItems] = useState<TopItem[]>([])
   const [salespersonStats, setSalespersonStats] = useState<SalespersonStats[]>([])
 
+  // Chart data state
+  const [paymentMethodData, setPaymentMethodData] = useState<{ name: string; value: number; count: number }[]>([])
+  const [customersByRankData, setCustomersByRankData] = useState<{ rank: string; count: number }[]>([])
+
   // Loading states
   const [loadingStats, setLoadingStats] = useState(false)
   const [loadingCustomers, setLoadingCustomers] = useState(false)
   const [loadingServices, setLoadingServices] = useState(false)
   const [loadingItems, setLoadingItems] = useState(false)
   const [loadingSalespeople, setLoadingSalespeople] = useState(false)
+  const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false)
+  const [loadingCustomersByRank, setLoadingCustomersByRank] = useState(false)
 
   // Load all customers for search
   useEffect(() => {
@@ -249,6 +257,8 @@ const Homepage: React.FC = () => {
     loadTopSellingServices()
     loadTopSellingItems()
     loadSalespersonRanking()
+    loadPaymentMethodDistribution()
+    loadCustomersByRank()
   }, [dateRange])
 
   // Handle search filtering
@@ -1080,6 +1090,281 @@ const Homepage: React.FC = () => {
     }
   }
 
+  // Normalize payment method names to group similar variations
+  const normalizePaymentMethod = (method: string | null | undefined): string => {
+    if (!method) return 'Unknown'
+
+    const normalized = method.trim().toUpperCase()
+
+    // Map variations to standard names
+    if (normalized.includes('CASH') || normalized === 'TUNAI') {
+      return 'Cash'
+    }
+    if (normalized.includes('CARD') || normalized.includes('CREDIT') || normalized.includes('DEBIT')) {
+      return 'Credit/Debit Card'
+    }
+    if (normalized.includes('QR') || normalized.includes('QRPAY') ||
+        normalized === 'QR PAY' || normalized === 'QRPH') {
+      return 'QR Pay'
+    }
+    if (normalized.includes('TRANSFER') || normalized.includes('ONLINE') || normalized.includes('BANK')) {
+      return 'Online Transfer'
+    }
+    if (normalized.includes('EWALLET') || normalized.includes('E-WALLET') ||
+        normalized.includes('WALLET') || normalized.includes('TNG') ||
+        normalized.includes('GRAB') || normalized.includes('BOOST')) {
+      return 'E-Wallet'
+    }
+    if (normalized.includes('CHEQUE') || normalized.includes('CHECK')) {
+      return 'Cheque'
+    }
+    if (normalized === '' || normalized === 'N/A' || normalized === 'NA') {
+      return 'Unknown'
+    }
+
+    // Return title case for unmatched methods
+    return method.trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ')
+  }
+
+  // Load payment method distribution
+  const loadPaymentMethodDistribution = async () => {
+    setLoadingPaymentMethods(true)
+    try {
+      console.log('[Homepage] Loading Payment Method Distribution...')
+
+      // Fetch service_sales payment methods with pagination
+      let serviceSalesData: any[] = []
+      let serviceSalesPage = 0
+      let hasMoreServiceSales = true
+
+      while (hasMoreServiceSales) {
+        let serviceSalesQuery = supabase
+          .from('service_sales')
+          .select('payment_method, payment_amount')
+          .not('payment_method', 'is', null)
+          .not('payment_amount', 'is', null)
+          .range(serviceSalesPage * 1000, (serviceSalesPage + 1) * 1000 - 1)
+
+        if (dateRange.from) {
+          serviceSalesQuery = serviceSalesQuery.gte('sale_date', toLocalDateString(dateRange.from))
+        }
+        if (dateRange.to) {
+          serviceSalesQuery = serviceSalesQuery.lte('sale_date', toLocalDateString(dateRange.to))
+        }
+
+        const { data, error } = await serviceSalesQuery
+
+        if (error) {
+          console.error('[Homepage] Error fetching service sales payment methods:', error)
+          throw error
+        }
+
+        if (data && data.length > 0) {
+          serviceSalesData.push(...data)
+          hasMoreServiceSales = data.length === 1000
+          serviceSalesPage++
+        } else {
+          hasMoreServiceSales = false
+        }
+      }
+
+      console.log('[Homepage] Fetched', serviceSalesData.length, 'service sales records')
+
+      // Fetch items payment methods with pagination
+      let itemsData: any[] = []
+      let itemsPage = 0
+      let hasMoreItems = true
+
+      while (hasMoreItems) {
+        let itemsQuery = supabase
+          .from('items')
+          .select('payment_method, total_price')
+          .not('payment_method', 'is', null)
+          .not('total_price', 'is', null)
+          .range(itemsPage * 1000, (itemsPage + 1) * 1000 - 1)
+
+        if (dateRange.from) {
+          itemsQuery = itemsQuery.gte('sale_date', toLocalDateString(dateRange.from))
+        }
+        if (dateRange.to) {
+          itemsQuery = itemsQuery.lte('sale_date', toLocalDateString(dateRange.to))
+        }
+
+        const { data, error } = await itemsQuery
+
+        if (error) {
+          console.error('[Homepage] Error fetching items payment methods:', error)
+          throw error
+        }
+
+        if (data && data.length > 0) {
+          itemsData.push(...data)
+          hasMoreItems = data.length === 1000
+          itemsPage++
+        } else {
+          hasMoreItems = false
+        }
+      }
+
+      console.log('[Homepage] Fetched', itemsData.length, 'items records')
+
+      // Aggregate by payment method with normalization - track both value and count
+      const methodMap = new Map<string, { value: number; count: number }>()
+
+      serviceSalesData?.forEach(s => {
+        const method = normalizePaymentMethod(s.payment_method)
+        const current = methodMap.get(method) || { value: 0, count: 0 }
+        methodMap.set(method, {
+          value: current.value + (s.payment_amount || 0),
+          count: current.count + 1
+        })
+      })
+
+      itemsData?.forEach(i => {
+        const method = normalizePaymentMethod(i.payment_method)
+        const current = methodMap.get(method) || { value: 0, count: 0 }
+        methodMap.set(method, {
+          value: current.value + (i.total_price || 0),
+          count: current.count + 1
+        })
+      })
+
+      // Convert to chart format and sort by value
+      const chartData = Array.from(methodMap.entries())
+        .map(([name, data]) => ({ name, value: data.value, count: data.count }))
+        .filter(item => item.value > 0)
+        .sort((a, b) => b.value - a.value)
+
+      console.log('[Homepage] Payment method distribution processed:', chartData.length, 'methods')
+      console.log('[Homepage] Payment method data sample:', chartData.slice(0, 3))
+      console.log('[Homepage] Total payment value:', chartData.reduce((sum, d) => sum + d.value, 0))
+      setPaymentMethodData(chartData)
+    } catch (error) {
+      console.error('[Homepage] Error loading payment method distribution:', error)
+      setPaymentMethodData([])
+    } finally {
+      setLoadingPaymentMethods(false)
+    }
+  }
+
+  // Load service category revenue
+  const loadCustomersByRank = async () => {
+    setLoadingCustomersByRank(true)
+    try {
+      console.log('[Homepage] Loading Customers by Membership Rank...')
+
+      // Fetch all customers
+      let allCustomers: any[] = []
+      let customerPage = 0
+      let hasMoreCustomers = true
+
+      while (hasMoreCustomers) {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('id')
+          .range(customerPage * 1000, (customerPage + 1) * 1000 - 1)
+
+        if (error) throw error
+
+        if (data && data.length > 0) {
+          allCustomers.push(...data)
+          hasMoreCustomers = data.length === 1000
+          customerPage++
+        } else {
+          hasMoreCustomers = false
+        }
+      }
+
+      console.log('[Homepage] Fetched', allCustomers.length, 'total customers')
+
+      // Fetch all service_sales to calculate spending per customer
+      let allServiceSales: any[] = []
+      let servicePage = 0
+      let hasMoreService = true
+
+      while (hasMoreService) {
+        const { data, error } = await supabase
+          .from('service_sales')
+          .select('customer_id, payment_amount')
+          .not('customer_id', 'is', null)
+          .not('payment_amount', 'is', null)
+          .range(servicePage * 1000, (servicePage + 1) * 1000 - 1)
+
+        if (error) throw error
+
+        if (data && data.length > 0) {
+          allServiceSales.push(...data)
+          hasMoreService = data.length === 1000
+          servicePage++
+        } else {
+          hasMoreService = false
+        }
+      }
+
+      console.log('[Homepage] Fetched', allServiceSales.length, 'service sales')
+
+      // Calculate total spending per customer from service_sales
+      const customerSpending = new Map<string, number>()
+
+      allServiceSales.forEach(s => {
+        const current = customerSpending.get(s.customer_id) || 0
+        customerSpending.set(s.customer_id, current + (s.payment_amount || 0))
+      })
+
+      console.log('[Homepage] Calculated spending for', customerSpending.size, 'customers with transactions')
+
+      // Calculate rank for ALL customers (including those with no spending)
+      const rankMap = new Map<string, number>()
+
+      allCustomers.forEach(customer => {
+        const spending = customerSpending.get(customer.id) || 0
+        let rank: string
+
+        // Calculate rank based on spending tiers
+        if (spending >= 8000) {
+          rank = 'PLATINUM'
+        } else if (spending >= 5000) {
+          rank = 'GOLD'
+        } else if (spending >= 2000) {
+          rank = 'SILVER'
+        } else if (spending >= 500) {
+          rank = 'BRONZE'
+        } else if (spending >= 50) {
+          rank = 'STARTER'
+        } else {
+          rank = 'CONSULTATION'
+        }
+
+        const current = rankMap.get(rank) || 0
+        rankMap.set(rank, current + 1)
+      })
+
+      // Define tier hierarchy for sorting
+      const tierOrder = ['PLATINUM', 'GOLD', 'SILVER', 'BRONZE', 'STARTER', 'CONSULTATION']
+
+      // Convert to chart format and sort by tier hierarchy
+      const chartData = Array.from(rankMap.entries())
+        .map(([rank, count]) => ({ rank, count }))
+        .filter(item => item.count > 0)
+        .sort((a, b) => {
+          const indexA = tierOrder.indexOf(a.rank)
+          const indexB = tierOrder.indexOf(b.rank)
+          return indexA - indexB
+        })
+
+      console.log('[Homepage] Customer rank distribution processed:', chartData)
+      setCustomersByRankData(chartData)
+    } catch (error) {
+      console.error('[Homepage] Error loading customers by rank:', error)
+      setCustomersByRankData([])
+    } finally {
+      setLoadingCustomersByRank(false)
+    }
+  }
+
   const handleCustomerSelect = (customer: Customer) => {
     console.log('[Homepage] Customer selected:', customer.id, customer.name)
     selectCustomer(customer)
@@ -1174,7 +1459,7 @@ const Homepage: React.FC = () => {
         </BentoGrid>
 
         {/* Dashboard Cards Grid */}
-        <BentoGrid cols={2} gap="md">
+        <BentoGrid cols={2} gap="md" className="mb-6">
           {/* Beauticians Leaderboard */}
           <SalespersonLeaderboard
             data={salespersonStats}
@@ -1200,6 +1485,85 @@ const Homepage: React.FC = () => {
             data={topServices}
             loading={loadingServices}
           />
+        </BentoGrid>
+
+        {/* Payment Methods & Service Categories Row */}
+        <BentoGrid cols={2} gap="md">
+          {/* Payment Methods Pie Chart */}
+          <BentoCard
+            title="Payment Methods"
+            icon={CreditCard}
+            iconColor="primary"
+            variant="gradient"
+            colSpan={1}
+            className="animate-fade-in"
+          >
+            {loadingPaymentMethods ? (
+              <div className="flex items-center justify-center h-[300px]">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : paymentMethodData.length === 0 ? (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                No payment data available
+              </div>
+            ) : (
+              <GradientPieChart
+                data={paymentMethodData}
+                height={300}
+                showLabel={false}
+                legendPosition="bottom"
+                showLegend={true}
+                showTooltip={true}
+                animate={true}
+                useGradient={true}
+                formatter={(value) => formatCurrency(value)}
+                donutMode={true}
+                innerRadius="50%"
+                paddingAngle={3}
+                cornerRadius={5}
+                centerLabel={{
+                  value: `${paymentMethodData.reduce((sum, d) => sum + d.count, 0)}`,
+                  subtitle: 'payments'
+                }}
+              />
+            )}
+          </BentoCard>
+
+          {/* Customers by Membership Tier */}
+          <BentoCard
+            title="Customers by Membership Tier"
+            icon={Users}
+            iconColor="secondary"
+            variant="gradient"
+            colSpan={1}
+            className="animate-fade-in"
+          >
+            {loadingCustomersByRank ? (
+              <div className="flex items-center justify-center h-[300px]">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : customersByRankData.length === 0 ? (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                No customer rank data available
+              </div>
+            ) : (
+              <GradientBarChart
+                data={customersByRankData}
+                dataKey="count"
+                xAxisKey="rank"
+                yAxisKey="rank"
+                height={300}
+                layout="vertical"
+                useGradient={true}
+                gradientColors={['danger', 'warning', 'purple', 'primary', 'success', 'accent']}
+                showGrid={false}
+                showXAxis={false}
+                showYAxis={true}
+                showTooltip={true}
+                animate={true}
+              />
+            )}
+          </BentoCard>
         </BentoGrid>
       </PageContainer>
     </Layout>

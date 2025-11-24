@@ -122,6 +122,11 @@ export function DataTable<TData>({
                           'bg-muted/50 font-semibold',
                           header.column.getCanSort() && 'cursor-pointer select-none'
                         )}
+                        style={{
+                          width: `${header.getSize()}px`,
+                          minWidth: `${header.column.columnDef.minSize ?? 20}px`,
+                          maxWidth: `${header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER}px`
+                        }}
                         onClick={header.column.getToggleSortingHandler()}
                       >
                         {header.isPlaceholder ? null : (
@@ -143,7 +148,15 @@ export function DataTable<TData>({
                   {showColumnFilters && (
                     <TableRow>
                       {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id} className="p-2 bg-muted/30">
+                        <TableHead
+                          key={header.id}
+                          className="p-2 bg-muted/30"
+                          style={{
+                            width: `${header.getSize()}px`,
+                            minWidth: `${header.column.columnDef.minSize ?? 20}px`,
+                            maxWidth: `${header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER}px`
+                          }}
+                        >
                           {header.column.getCanFilter() ? (
                             <div onClick={(e) => e.stopPropagation()}>
                               {header.column.columnDef.meta?.filterComponent

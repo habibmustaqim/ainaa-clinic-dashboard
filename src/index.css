@@ -37,6 +37,42 @@
     --chart-3: rgb(37, 99, 239);
     --chart-4: rgb(26, 78, 218);
     --chart-5: rgb(31, 63, 173);
+
+    /* Brand Colors - Complementary to blue theme */
+    --brand-teal: rgb(20, 184, 166);
+    --brand-teal-light: rgba(20, 184, 166, 0.5);
+    --brand-purple: rgb(139, 92, 246);
+    --brand-purple-light: rgba(139, 92, 246, 0.5);
+    --brand-rose: rgb(244, 63, 94);
+    --brand-rose-light: rgba(244, 63, 94, 0.5);
+
+    /* Gradient Stop Colors - Light Mode */
+    --gradient-primary-from: rgb(47, 64, 119);
+    --gradient-primary-to: rgba(47, 64, 119, 0.5);
+    --gradient-secondary-from: rgb(139, 92, 246);
+    --gradient-secondary-to: rgba(139, 92, 246, 0.5);
+    --gradient-accent-from: rgb(59, 130, 246);
+    --gradient-accent-to: rgba(59, 130, 246, 0.5);
+    --gradient-success-from: rgb(16, 185, 129);
+    --gradient-success-to: rgba(16, 185, 129, 0.5);
+    --gradient-warning-from: rgb(245, 158, 11);
+    --gradient-warning-to: rgba(245, 158, 11, 0.5);
+    --gradient-danger-from: rgb(231, 0, 11);
+    --gradient-danger-to: rgba(231, 0, 11, 0.5);
+    --gradient-info-from: rgb(14, 165, 233);
+    --gradient-info-to: rgba(14, 165, 233, 0.5);
+    --gradient-teal-from: rgb(20, 184, 166);
+    --gradient-teal-to: rgba(20, 184, 166, 0.5);
+    --gradient-purple-from: rgb(139, 92, 246);
+    --gradient-purple-to: rgba(139, 92, 246, 0.5);
+    --gradient-rose-from: rgb(244, 63, 94);
+    --gradient-rose-to: rgba(244, 63, 94, 0.5);
+
+    /* Chart Axis & Grid Colors */
+    --chart-axis-line: rgb(214, 214, 220);
+    --chart-axis-tick: rgb(115, 115, 115);
+    --chart-grid: rgba(214, 214, 220, 0.5);
+
     --sidebar: rgb(250, 250, 250);
     --sidebar-foreground: rgb(10, 10, 10);
     --sidebar-primary: rgb(23, 23, 23);
@@ -98,6 +134,42 @@
     --chart-3: rgb(37, 99, 239);
     --chart-4: rgb(26, 78, 218);
     --chart-5: rgb(31, 63, 173);
+
+    /* Brand Colors - Complementary to blue theme (Dark Mode) */
+    --brand-teal: rgb(45, 212, 191);
+    --brand-teal-light: rgba(45, 212, 191, 0.5);
+    --brand-purple: rgb(167, 139, 250);
+    --brand-purple-light: rgba(167, 139, 250, 0.5);
+    --brand-rose: rgb(251, 113, 133);
+    --brand-rose-light: rgba(251, 113, 133, 0.5);
+
+    /* Gradient Stop Colors - Dark Mode */
+    --gradient-primary-from: rgb(96, 126, 225);
+    --gradient-primary-to: rgba(96, 126, 225, 0.5);
+    --gradient-secondary-from: rgb(167, 139, 250);
+    --gradient-secondary-to: rgba(167, 139, 250, 0.5);
+    --gradient-accent-from: rgb(96, 165, 250);
+    --gradient-accent-to: rgba(96, 165, 250, 0.5);
+    --gradient-success-from: rgb(34, 197, 94);
+    --gradient-success-to: rgba(34, 197, 94, 0.5);
+    --gradient-warning-from: rgb(251, 191, 36);
+    --gradient-warning-to: rgba(251, 191, 36, 0.5);
+    --gradient-danger-from: rgb(255, 100, 103);
+    --gradient-danger-to: rgba(255, 100, 103, 0.5);
+    --gradient-info-from: rgb(56, 189, 248);
+    --gradient-info-to: rgba(56, 189, 248, 0.5);
+    --gradient-teal-from: rgb(45, 212, 191);
+    --gradient-teal-to: rgba(45, 212, 191, 0.5);
+    --gradient-purple-from: rgb(167, 139, 250);
+    --gradient-purple-to: rgba(167, 139, 250, 0.5);
+    --gradient-rose-from: rgb(251, 113, 133);
+    --gradient-rose-to: rgba(251, 113, 133, 0.5);
+
+    /* Chart Axis & Grid Colors - Dark Mode */
+    --chart-axis-line: rgb(60, 60, 60);
+    --chart-axis-tick: rgb(161, 161, 161);
+    --chart-grid: rgba(60, 60, 60, 0.5);
+
     --sidebar: rgb(23, 23, 23);
     --sidebar-foreground: rgb(250, 250, 250);
     --sidebar-primary: rgb(20, 71, 230);

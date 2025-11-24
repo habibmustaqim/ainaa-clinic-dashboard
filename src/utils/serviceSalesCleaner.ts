@@ -510,7 +510,8 @@ export function cleanServiceSalesRow(
     0
   )
   const paymentMethod = cleanString(
-    raw['Payment Mode'] ||        // Primary: actual Excel header name
+    raw['Mode'] ||                // Primary: actual Excel header name (column AE)
+    raw['Payment Mode'] ||
     raw['Payment'] ||
     raw['Payment '] ||
     raw[' Payment'] ||

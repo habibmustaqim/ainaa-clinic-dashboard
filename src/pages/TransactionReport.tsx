@@ -701,7 +701,7 @@ const TransactionReport: React.FC = () => {
     const title = 'Sales Report - Ainaa Clinic'
 
     const filteredData = tableInstance
-      ? tableInstance.getFilteredRowModel().rows.map((row: any) => row.original)
+      ? tableInstance.getSortedRowModel().rows.map((row: any) => row.original)
       : rawData
 
     exportData(format, {

@@ -9,6 +9,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Label,
   RadarChart,
   Radar,
   PolarGrid,
@@ -23,64 +24,62 @@ import {
   TooltipProps,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import {
+  GradientColor,
+  GradientOrientation,
+  generateAllGradients,
+  getGradientFill,
+  getStrokeColor,
+  getPieChartColors,
+  getGradientId,
+} from '@/lib/gradients'
+import {
+  CHART_AXIS_STYLE,
+  CHART_YAXIS_STYLE,
+  CHART_GRID_STYLE,
+  CHART_LEGEND_STYLE,
+  CHART_SPACING,
+  CHART_TYPOGRAPHY,
+  CHART_ANIMATION,
+} from '@/lib/chartTheme'
 
 // Gradient definitions for charts
-export const ChartGradients = () => (
-  <defs>
-    {/* Primary Gradient */}
-    <linearGradient id="gradientPrimary" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="rgb(47, 64, 119)" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="rgb(47, 64, 119)" stopOpacity={0.1} />
-    </linearGradient>
+export const ChartGradients = () => {
+  const verticalGradients = generateAllGradients('vertical')
+  const horizontalGradients = generateAllGradients('horizontal')
+  const allGradients = [...verticalGradients, ...horizontalGradients]
 
-    {/* Secondary Gradient */}
-    <linearGradient id="gradientSecondary" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="rgba(47, 64, 119, 0.7)" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="rgba(47, 64, 119, 0.7)" stopOpacity={0.1} />
-    </linearGradient>
-
-    {/* Accent Gradient */}
-    <linearGradient id="gradientAccent" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="rgba(47, 64, 119, 0.5)" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="rgba(47, 64, 119, 0.5)" stopOpacity={0.1} />
-    </linearGradient>
-
-    {/* Success Gradient */}
-    <linearGradient id="gradientSuccess" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.1} />
-    </linearGradient>
-
-    {/* Warning Gradient */}
-    <linearGradient id="gradientWarning" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="hsl(38, 92%, 50%)" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="hsl(38, 92%, 50%)" stopOpacity={0.1} />
-    </linearGradient>
-
-    {/* Danger Gradient */}
-    <linearGradient id="gradientDanger" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="hsl(0, 84%, 60%)" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="hsl(0, 84%, 60%)" stopOpacity={0.1} />
-    </linearGradient>
-
-    {/* Horizontal Gradients for Bars */}
-    <linearGradient id="gradientBarPrimary" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stopColor="rgb(47, 64, 119)" stopOpacity={0.9} />
-      <stop offset="100%" stopColor="rgba(47, 64, 119, 0.7)" stopOpacity={0.9} />
-    </linearGradient>
-
-    <linearGradient id="gradientBarAccent" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stopColor="rgba(47, 64, 119, 0.6)" stopOpacity={0.9} />
-      <stop offset="100%" stopColor="rgb(47, 64, 119)" stopOpacity={0.9} />
-    </linearGradient>
-  </defs>
-)
+  return (
+    <defs>
+      {allGradients.map((gradient) => {
+        const isVertical = gradient.orientation === 'vertical'
+        return (
+          <linearGradient
+            key={gradient.id}
+            id={gradient.id}
+            x1="0"
+            y1={isVertical ? '0' : '0'}
+            x2={isVertical ? '0' : '1'}
+            y2={isVertical ? '1' : '0'}
+          >
+            <stop offset="0%" stopColor={gradient.fromColor} stopOpacity={1} />
+            <stop offset="100%" stopColor={gradient.toColor} stopOpacity={1} />
+          </linearGradient>
+        )
+      })}
+    </defs>
+  )
+}
 
 // Custom Tooltip Component
-const CustomTooltip: React.FC<TooltipProps<any, any>> = ({ active, payload, label }) => {
+interface CustomTooltipProps extends TooltipProps<any, any> {
+  formatter?: (value: number) => string
+}
+
+const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, formatter }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-card p-3 rounded-lg shadow-lg border border-border">
+      <div className="bg-background backdrop-blur-sm border border-border rounded-lg shadow-lg p-3">
         <p className="text-sm font-medium text-foreground mb-2">
           {label}
         </p>
@@ -94,7 +93,7 @@ const CustomTooltip: React.FC<TooltipProps<any, any>> = ({ active, payload, labe
               {entry.name}:
             </span>
             <span className="font-medium text-foreground">
-              {entry.value?.toLocaleString()}
+              {formatter ? formatter(entry.value) : entry.value?.toLocaleString()}
             </span>
           </div>
         ))}
@@ -110,7 +109,7 @@ interface GradientAreaChartProps {
   dataKey: string
   xAxisKey: string
   height?: number
-  color?: 'primary' | 'secondary' | 'accent' | 'success' | 'warning' | 'danger'
+  color?: GradientColor
   className?: string
   showGrid?: boolean
   animate?: boolean
@@ -126,55 +125,32 @@ export const GradientAreaChart: React.FC<GradientAreaChartProps> = ({
   showGrid = true,
   animate = true,
 }) => {
-  const gradientMap = {
-    primary: 'url(#gradientPrimary)',
-    secondary: 'url(#gradientSecondary)',
-    accent: 'url(#gradientAccent)',
-    success: 'url(#gradientSuccess)',
-    warning: 'url(#gradientWarning)',
-    danger: 'url(#gradientDanger)',
-  }
-
-  const strokeColors = {
-    primary: 'rgb(47, 64, 119)',
-    secondary: 'rgba(47, 64, 119, 0.7)',
-    accent: 'rgba(47, 64, 119, 0.5)',
-    success: 'hsl(142, 71%, 45%)',
-    warning: 'hsl(38, 92%, 50%)',
-    danger: 'hsl(0, 84%, 60%)',
-  }
-
   return (
     <div className={cn('w-full', className)}>
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <AreaChart data={data} margin={CHART_SPACING.defaultMargin}>
           <ChartGradients />
           {showGrid && (
             <CartesianGrid
-              strokeDasharray="3 3"
+              {...CHART_GRID_STYLE}
               className="stroke-border"
-              vertical={false}
             />
           )}
           <XAxis
             dataKey={xAxisKey}
-            className="text-xs"
-            tick={{ fill: 'hsl(215, 16%, 47%)' }}
-            axisLine={{ stroke: 'hsl(214, 32%, 91%)' }}
+            {...CHART_AXIS_STYLE}
           />
           <YAxis
-            className="text-xs"
-            tick={{ fill: 'hsl(215, 16%, 47%)' }}
-            axisLine={{ stroke: 'hsl(214, 32%, 91%)' }}
+            {...CHART_YAXIS_STYLE}
           />
           <Tooltip content={<CustomTooltip />} />
           <Area
             type="monotone"
             dataKey={dataKey}
-            stroke={strokeColors[color]}
+            stroke={getStrokeColor(color)}
             strokeWidth={2}
-            fill={gradientMap[color]}
-            animationDuration={animate ? 1000 : 0}
+            fill={getGradientFill(color, 'vertical')}
+            animationDuration={animate ? CHART_ANIMATION.duration : 0}
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -187,7 +163,7 @@ interface GradientLineChartProps {
   data: any[]
   lines: Array<{
     dataKey: string
-    color: 'primary' | 'secondary' | 'accent' | 'success' | 'warning' | 'danger'
+    color: GradientColor
     name?: string
   }>
   xAxisKey: string
@@ -195,6 +171,8 @@ interface GradientLineChartProps {
   className?: string
   showGrid?: boolean
   animate?: boolean
+  showBackground?: boolean
+  backgroundGradient?: GradientColor
 }
 
 export const GradientLineChart: React.FC<GradientLineChartProps> = ({
@@ -205,54 +183,51 @@ export const GradientLineChart: React.FC<GradientLineChartProps> = ({
   className,
   showGrid = true,
   animate = true,
+  showBackground = false,
+  backgroundGradient = 'primary',
 }) => {
-  const strokeColors = {
-    primary: 'rgb(47, 64, 119)',
-    secondary: 'rgba(47, 64, 119, 0.7)',
-    accent: 'rgba(47, 64, 119, 0.5)',
-    success: 'hsl(142, 71%, 45%)',
-    warning: 'hsl(38, 92%, 50%)',
-    danger: 'hsl(0, 84%, 60%)',
-  }
-
   return (
     <div className={cn('w-full', className)}>
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <LineChart data={data} margin={CHART_SPACING.defaultMargin}>
+          <ChartGradients />
           {showGrid && (
             <CartesianGrid
-              strokeDasharray="3 3"
+              {...CHART_GRID_STYLE}
               className="stroke-border"
-              vertical={false}
             />
           )}
           <XAxis
             dataKey={xAxisKey}
-            className="text-xs"
-            tick={{ fill: 'hsl(215, 16%, 47%)' }}
-            axisLine={{ stroke: 'hsl(214, 32%, 91%)' }}
+            {...CHART_AXIS_STYLE}
           />
           <YAxis
-            className="text-xs"
-            tick={{ fill: 'hsl(215, 16%, 47%)' }}
-            axisLine={{ stroke: 'hsl(214, 32%, 91%)' }}
+            {...CHART_YAXIS_STYLE}
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend
-            wrapperStyle={{ fontSize: '12px' }}
-            iconType="line"
+            {...CHART_LEGEND_STYLE}
           />
+          {/* Optional gradient background */}
+          {showBackground && (
+            <defs>
+              <linearGradient id="lineChartBackground" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={getStrokeColor(backgroundGradient)} stopOpacity={0.1} />
+                <stop offset="100%" stopColor={getStrokeColor(backgroundGradient)} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+          )}
           {lines.map((line, index) => (
             <Line
               key={index}
               type="monotone"
               dataKey={line.dataKey}
               name={line.name || line.dataKey}
-              stroke={strokeColors[line.color]}
+              stroke={getStrokeColor(line.color)}
               strokeWidth={2}
-              dot={{ r: 3, fill: strokeColors[line.color] }}
+              dot={{ r: 3, fill: getStrokeColor(line.color) }}
               activeDot={{ r: 5 }}
-              animationDuration={animate ? 1000 : 0}
+              animationDuration={animate ? CHART_ANIMATION.duration : 0}
             />
           ))}
         </LineChart>
@@ -266,70 +241,212 @@ interface GradientBarChartProps {
   data: any[]
   dataKey: string
   xAxisKey: string
+  yAxisKey?: string  // For vertical layout (horizontal bars)
   height?: number
-  color?: 'primary' | 'accent'
+  color?: GradientColor
+  colors?: string[]  // Custom colors array for each bar
+  gradientColors?: GradientColor[]  // Gradient colors for each bar
+  useGradient?: boolean  // Whether to use gradient fills for bars
+  layout?: 'horizontal' | 'vertical'  // 'horizontal' = vertical bars (default), 'vertical' = horizontal bars
   className?: string
   showGrid?: boolean
+  showXAxis?: boolean  // Show/hide X axis
+  showYAxis?: boolean  // Show/hide Y axis
   animate?: boolean
+  showTooltip?: boolean
+  formatter?: (value: number) => string
 }
 
 export const GradientBarChart: React.FC<GradientBarChartProps> = ({
   data,
   dataKey,
   xAxisKey,
+  yAxisKey,
   height = 300,
   color = 'primary',
+  colors,
+  gradientColors,
+  useGradient = true,
+  layout = 'horizontal',
   className,
   showGrid = true,
+  showXAxis = true,
+  showYAxis = true,
   animate = true,
+  showTooltip = true,
+  formatter,
 }) => {
-  const gradientMap = {
-    primary: 'url(#gradientBarPrimary)',
-    accent: 'url(#gradientBarAccent)',
-  }
+  const isHorizontalBars = layout === 'vertical'
+  const gradientOrientation: GradientOrientation = isHorizontalBars ? 'horizontal' : 'vertical'
+
+  // Generate all gradients if using gradient colors for each bar
+  const allGradients = (useGradient && gradientColors) ? generateAllGradients(gradientOrientation) : []
 
   return (
     <div className={cn('w-full', className)}>
       <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <BarChart
+          data={data}
+          margin={CHART_SPACING.defaultMargin}
+          layout={layout}
+        >
           <ChartGradients />
+          {useGradient && gradientColors && (
+            <defs>
+              {allGradients.map((gradient) => (
+                <linearGradient
+                  key={gradient.id}
+                  id={gradient.id}
+                  x1={gradientOrientation === 'horizontal' ? '0' : '0'}
+                  y1={gradientOrientation === 'horizontal' ? '0' : '0'}
+                  x2={gradientOrientation === 'horizontal' ? '1' : '0'}
+                  y2={gradientOrientation === 'horizontal' ? '0' : '1'}
+                >
+                  <stop offset="0%" stopColor={gradient.fromColor} stopOpacity={1} />
+                  <stop offset="100%" stopColor={gradient.toColor} stopOpacity={1} />
+                </linearGradient>
+              ))}
+            </defs>
+          )}
           {showGrid && (
             <CartesianGrid
-              strokeDasharray="3 3"
+              {...CHART_GRID_STYLE}
               className="stroke-border"
-              vertical={false}
             />
           )}
-          <XAxis
-            dataKey={xAxisKey}
-            className="text-xs"
-            tick={{ fill: 'hsl(215, 16%, 47%)' }}
-            axisLine={{ stroke: 'hsl(214, 32%, 91%)' }}
-          />
-          <YAxis
-            className="text-xs"
-            tick={{ fill: 'hsl(215, 16%, 47%)' }}
-            axisLine={{ stroke: 'hsl(214, 32%, 91%)' }}
-          />
-          <Tooltip content={<CustomTooltip />} />
+          {isHorizontalBars ? (
+            <>
+              <XAxis
+                type="number"
+                tick={showXAxis}
+                axisLine={showXAxis}
+                tickLine={showXAxis}
+              />
+              <YAxis
+                type="category"
+                dataKey={yAxisKey || xAxisKey}
+                tick={showYAxis ? { fill: 'var(--muted-foreground)', fontSize: 10 } : false}
+                axisLine={false}
+                tickLine={false}
+                width={80}
+              />
+            </>
+          ) : (
+            <>
+              <XAxis
+                type="category"
+                dataKey={xAxisKey}
+                tick={showXAxis}
+                axisLine={showXAxis}
+                tickLine={showXAxis}
+                {...CHART_AXIS_STYLE}
+              />
+              <YAxis
+                type="number"
+                tick={showYAxis}
+                axisLine={showYAxis}
+                tickLine={showYAxis}
+                {...CHART_YAXIS_STYLE}
+              />
+            </>
+          )}
+          {showTooltip && <Tooltip content={<CustomTooltip formatter={formatter} />} />}
           <Bar
             dataKey={dataKey}
-            fill={gradientMap[color]}
-            radius={[8, 8, 0, 0]}
-            animationDuration={animate ? 1000 : 0}
-          />
+            fill={useGradient && !gradientColors && !colors ? getGradientFill(color, gradientOrientation) : getStrokeColor(color)}
+            radius={isHorizontalBars ? [8, 8, 8, 8] : [8, 8, 0, 0]}
+            animationDuration={animate ? CHART_ANIMATION.duration : 0}
+          >
+            {gradientColors ? (
+              data.map((entry, index) => {
+                const gradientColor = gradientColors[index % gradientColors.length]
+                return (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={useGradient ? getGradientFill(gradientColor, gradientOrientation) : getStrokeColor(gradientColor)}
+                  />
+                )
+              })
+            ) : colors ? (
+              data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+              ))
+            ) : null}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
   )
 }
 
+// Donut Center Label Component
+interface DonutCenterLabelProps {
+  viewBox?: { cx: number; cy: number }
+  totalValue?: string
+  totalCount?: string | number
+}
+
+const DonutCenterLabel: React.FC<DonutCenterLabelProps> = ({
+  viewBox,
+  totalValue,
+  totalCount
+}) => {
+  if (!viewBox) return null
+  const { cx, cy } = viewBox
+
+  return (
+    <g>
+      <text
+        x={cx}
+        y={cy - 8}
+        textAnchor="middle"
+        dominantBaseline="central"
+        style={{
+          fill: 'var(--foreground)',
+          fontWeight: 600,
+          fontSize: '24px'
+        }}
+      >
+        {totalValue}
+      </text>
+      {totalCount && (
+        <text
+          x={cx}
+          y={cy + 18}
+          textAnchor="middle"
+          dominantBaseline="central"
+          style={{
+            fill: 'var(--muted-foreground)',
+            fontSize: '12px'
+          }}
+        >
+          {totalCount}
+        </text>
+      )}
+    </g>
+  )
+}
+
 // Gradient Pie Chart
 interface GradientPieChartProps {
-  data: Array<{ name: string; value: number }>
+  data: Array<{ name: string; value: number; count?: number }>
   height?: number
   className?: string
   animate?: boolean
+  showLabel?: boolean
+  legendPosition?: 'bottom' | 'right' | 'top' | 'left'
+  showLegend?: boolean
+  showTooltip?: boolean
+  formatter?: (value: number) => string
+  useGradient?: boolean  // Whether to use gradient fills for segments
+  donutMode?: boolean  // Enable donut chart mode
+  innerRadius?: string | number  // Inner radius for donut mode
+  paddingAngle?: number  // Spacing between segments
+  cornerRadius?: number  // Rounded corners on segments
+  centerLabel?: {  // Center label configuration for donut mode
+    value: string
+    subtitle?: string
+  }
 }
 
 export const GradientPieChart: React.FC<GradientPieChartProps> = ({
@@ -337,38 +454,128 @@ export const GradientPieChart: React.FC<GradientPieChartProps> = ({
   height = 300,
   className,
   animate = true,
+  showLabel = false,
+  legendPosition = 'bottom',
+  showLegend = true,
+  showTooltip = true,
+  formatter,
+  useGradient = true,
+  donutMode = false,
+  innerRadius,
+  paddingAngle = 0,
+  cornerRadius = 0,
+  centerLabel,
 }) => {
-  const colors = [
-    'rgb(47, 64, 119)',            // Primary
-    'rgba(47, 64, 119, 0.8)',      // Primary 80%
-    'rgba(47, 64, 119, 0.6)',      // Primary 60%
-    'hsl(142, 71%, 45%)',          // Success (green)
-    'hsl(38, 92%, 50%)',           // Warning (amber)
-    'hsl(0, 84%, 60%)',            // Danger (red)
-    'rgba(47, 64, 119, 0.4)',      // Primary 40%
-    'hsl(43, 74%, 66%)',           // Yellow
-  ]
+  const colors = getPieChartColors()
+
+  // Generate all gradients needed for pie chart
+  const allGradients = useGradient ? generateAllGradients('vertical') : []
+
+  // Custom tooltip with formatter support, count, and percentage
+  const CustomPieTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+    if (!active || !payload || !payload.length) return null
+
+    const item = payload[0]
+    const value = item.value as number
+    const displayValue = formatter ? formatter(value) : value.toLocaleString()
+
+    // Calculate total value and percentage
+    const totalValue = data.reduce((sum, d) => sum + d.value, 0)
+    const percentage = ((value / totalValue) * 100).toFixed(1)
+
+    // Get count from payload if available
+    const count = item.payload?.count
+
+    return (
+      <div className="bg-background backdrop-blur-sm border border-border rounded-lg shadow-lg p-3">
+        <p className="text-sm font-medium text-foreground">{item.name}</p>
+        <p className="text-sm text-muted-foreground mt-1">{displayValue}</p>
+        {count !== undefined && (
+          <p className="text-xs text-muted-foreground/80 mt-1">
+            {count.toLocaleString()} transactions • {percentage}%
+          </p>
+        )}
+        {count === undefined && (
+          <p className="text-xs text-muted-foreground/80 mt-1">
+            {percentage}%
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // Generate fill colors or gradients
+  const getFillForIndex = (index: number): string => {
+    if (useGradient) {
+      const gradientColor = colors[index % colors.length]
+      return getGradientFill(gradientColor, 'vertical')
+    } else {
+      return getStrokeColor(colors[index % colors.length])
+    }
+  }
 
   return (
     <div className={cn('w-full', className)}>
       <ResponsiveContainer width="100%" height={height}>
         <PieChart>
+          {useGradient && (
+            <defs>
+              {allGradients.map((gradient) => (
+                <linearGradient
+                  key={gradient.id}
+                  id={gradient.id}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor={gradient.fromColor} stopOpacity={1} />
+                  <stop offset="100%" stopColor={gradient.toColor} stopOpacity={1} />
+                </linearGradient>
+              ))}
+            </defs>
+          )}
           <Pie
             data={data}
             cx="50%"
             cy="50%"
-            labelLine={false}
-            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-            outerRadius={80}
+            labelLine={showLabel}
+            label={showLabel ? ({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%` : false}
+            innerRadius={donutMode ? (innerRadius || "60%") : 0}
+            outerRadius={donutMode ? "80%" : 80}
+            paddingAngle={paddingAngle}
+            cornerRadius={cornerRadius}
             fill="#8884d8"
             dataKey="value"
-            animationDuration={animate ? 1000 : 0}
+            animationDuration={animate ? CHART_ANIMATION.duration : 0}
           >
+            {donutMode && centerLabel && (
+              <Label
+                content={
+                  <DonutCenterLabel
+                    totalValue={centerLabel.value}
+                    totalCount={centerLabel.subtitle}
+                  />
+                }
+                position="center"
+              />
+            )}
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+              <Cell key={`cell-${index}`} fill={getFillForIndex(index)} />
             ))}
           </Pie>
-          <Tooltip content={<CustomTooltip />} />
+          {showTooltip && <Tooltip content={<CustomPieTooltip />} />}
+          {showLegend && (
+            <Legend
+              verticalAlign={legendPosition === 'bottom' || legendPosition === 'top' ? legendPosition : 'middle'}
+              align={legendPosition === 'left' || legendPosition === 'right' ? legendPosition : 'center'}
+              height={legendPosition === 'bottom' || legendPosition === 'top' ? CHART_TYPOGRAPHY.legendHeight : undefined}
+              wrapperStyle={{
+                fontSize: `${CHART_TYPOGRAPHY.legendFontSize}px`,
+                paddingTop: legendPosition === 'bottom' ? `${CHART_TYPOGRAPHY.legendPadding}px` : '0'
+              }}
+            />
+          )}
         </PieChart>
       </ResponsiveContainer>
     </div>
@@ -379,8 +586,9 @@ export const GradientPieChart: React.FC<GradientPieChartProps> = ({
 interface SparklineProps {
   data: number[]
   height?: number
-  color?: 'primary' | 'secondary' | 'accent' | 'success' | 'warning' | 'danger'
+  color?: GradientColor
   className?: string
+  useGradient?: boolean
 }
 
 export const Sparkline: React.FC<SparklineProps> = ({
@@ -388,26 +596,19 @@ export const Sparkline: React.FC<SparklineProps> = ({
   height = 40,
   color = 'primary',
   className,
+  useGradient = true,
 }) => {
   const chartData = data.map((value, index) => ({ index, value }))
-
-  const strokeColors = {
-    primary: 'rgb(47, 64, 119)',
-    secondary: 'rgba(47, 64, 119, 0.7)',
-    accent: 'rgba(47, 64, 119, 0.5)',
-    success: 'hsl(142, 71%, 45%)',
-    warning: 'hsl(38, 92%, 50%)',
-    danger: 'hsl(0, 84%, 60%)',
-  }
 
   return (
     <div className={cn('w-full', className)}>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+          {useGradient && <ChartGradients />}
           <Line
             type="monotone"
             dataKey="value"
-            stroke={strokeColors[color]}
+            stroke={getStrokeColor(color)}
             strokeWidth={2}
             dot={false}
           />

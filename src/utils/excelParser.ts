@@ -303,9 +303,10 @@ export function cleanItemRow(
     ''
   ).toString().trim() || null
 
-  // Extract payment method from column AG (actual Excel header name: 'Payment Mode')
+  // Extract payment method from column AG (actual Excel header name: 'Mode')
   const paymentMethod = (
-    raw['Payment Mode'] ||        // Primary: actual Excel header name
+    raw['Mode'] ||                // Primary: actual Excel header name (column AG)
+    raw['Payment Mode'] ||
     raw['Payment'] ||
     raw['Payment '] ||
     raw[' Payment'] ||
