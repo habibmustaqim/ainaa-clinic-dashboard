@@ -11,7 +11,6 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { ColumnSelectionModal, ColumnOption, FilenameToken } from '@/components/ui/ColumnSelectionModal'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 import { exportData, ExportColumn } from '@/utils/exportUtils'
-import { calculateColumnWidth, getColumnConstraints, formatCurrencyForSizing, formatDateForSizing } from '@/utils/columnSizing'
 import { supabase } from '@/lib/supabase'
 
 // Column Filter Components
@@ -585,124 +584,6 @@ const CustomerReport: React.FC = () => {
       .map(name => ({ value: name, label: name }))
   }, [rawData])
 
-  // Calculate optimal column widths based on content
-  const columnWidths = useMemo(() => {
-    if (!rawData || rawData.length === 0) {
-      // Return default widths if no data
-      return {}
-    }
-
-    return {
-      membershipNumber: calculateColumnWidth(
-        rawData,
-        'membershipNumber',
-        'Membership ID',
-        { ...getColumnConstraints('membershipNumber') }
-      ),
-      customerName: calculateColumnWidth(
-        rawData,
-        'customerName',
-        'Customer',
-        { ...getColumnConstraints('customerName') }
-      ),
-      customerPhone: calculateColumnWidth(
-        rawData,
-        'customerPhone',
-        'Phone',
-        { ...getColumnConstraints('customerPhone') }
-      ),
-      customerBirthday: calculateColumnWidth(
-        rawData,
-        (row) => row.customerBirthday ? formatDateForSizing(row.customerBirthday) : '-',
-        'Birthday',
-        { ...getColumnConstraints('customerBirthday') }
-      ),
-      onboardingBeautician: calculateColumnWidth(
-        rawData,
-        'onboardingBeautician',
-        'Onboarding Beautician',
-        { ...getColumnConstraints('onboardingBeautician') }
-      ),
-      beauticians: calculateColumnWidth(
-        rawData,
-        'beauticians',
-        'All Beauticians',
-        { ...getColumnConstraints('beauticians') }
-      ),
-      totalTransactions: calculateColumnWidth(
-        rawData,
-        'totalTransactions',
-        'Total Visits',
-        { ...getColumnConstraints('totalTransactions') }
-      ),
-      firstVisitDate: calculateColumnWidth(
-        rawData,
-        (row) => row.firstVisitDate ? formatDateForSizing(row.firstVisitDate) : '-',
-        'First Visit',
-        { ...getColumnConstraints('firstVisitDate') }
-      ),
-      lastVisitDate: calculateColumnWidth(
-        rawData,
-        (row) => row.lastVisitDate ? formatDateForSizing(row.lastVisitDate) : '-',
-        'Last Visit',
-        { ...getColumnConstraints('lastVisitDate') }
-      ),
-      daysSinceLastVisit: calculateColumnWidth(
-        rawData,
-        (row) => row.daysSinceLastVisit !== null ? row.daysSinceLastVisit.toString() : '-',
-        'Days Since Visit',
-        { ...getColumnConstraints('daysSinceLastVisit') }
-      ),
-      totalRevenue: calculateColumnWidth(
-        rawData,
-        (row) => formatCurrencyForSizing(row.totalRevenue),
-        'Total Revenue',
-        { ...getColumnConstraints('totalRevenue') }
-      ),
-      avgTransactionAmount: calculateColumnWidth(
-        rawData,
-        (row) => formatCurrencyForSizing(row.avgTransactionAmount),
-        'Avg Transaction',
-        { ...getColumnConstraints('avgTransactionAmount') }
-      ),
-      totalServices: calculateColumnWidth(
-        rawData,
-        (row) => {
-          const data = row.totalServices as { amount: number; count: number }
-          return `${formatCurrencyForSizing(data.amount)} (${data.count})`
-        },
-        'Total Services',
-        { ...getColumnConstraints('totalServices') }
-      ),
-      totalItems: calculateColumnWidth(
-        rawData,
-        (row) => {
-          const data = row.totalItems as { amount: number; count: number }
-          return `${formatCurrencyForSizing(data.amount)} (${data.count})`
-        },
-        'Total Items',
-        { ...getColumnConstraints('totalItems') }
-      ),
-      topServices: calculateColumnWidth(
-        rawData,
-        'topServices',
-        'Top Services',
-        { ...getColumnConstraints('topServices') }
-      ),
-      customerStatus: calculateColumnWidth(
-        rawData,
-        'customerStatus',
-        'Status',
-        { ...getColumnConstraints('customerStatus') }
-      ),
-      customerRank: calculateColumnWidth(
-        rawData,
-        'customerRank',
-        'Rank',
-        { ...getColumnConstraints('customerRank') }
-      ),
-    }
-  }, [rawData])
 
   // Table columns
   const columns: ColumnDef<CustomerReportRow>[] = useMemo(() => [
@@ -735,11 +616,8 @@ const CustomerReport: React.FC = () => {
       ),
       cell: ({ row }) => {
         const membershipNumber = row.getValue('membershipNumber') as string
-        return <div className="text-center whitespace-nowrap">{membershipNumber}</div>
+        return <div className="w-[100px] text-center whitespace-nowrap">{membershipNumber}</div>
       },
-      size: columnWidths.membershipNumber || 120,
-      minSize: getColumnConstraints('membershipNumber').minWidth,
-      maxSize: getColumnConstraints('membershipNumber').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'includesString',
@@ -754,15 +632,12 @@ const CustomerReport: React.FC = () => {
         const name = row.getValue('customerName') as string
         return (
           <Tooltip content={name}>
-            <div className="truncate cursor-help">
+            <div className="max-w-[150px] truncate cursor-help">
               {name}
             </div>
           </Tooltip>
         )
       },
-      size: columnWidths.customerName || 180,
-      minSize: getColumnConstraints('customerName').minWidth,
-      maxSize: getColumnConstraints('customerName').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'includesString',
@@ -774,11 +649,8 @@ const CustomerReport: React.FC = () => {
       accessorKey: 'customerPhone',
       header: 'Phone',
       cell: ({ row }) => (
-        <div className="whitespace-nowrap">{row.getValue('customerPhone')}</div>
+        <div className="w-28 whitespace-nowrap">{row.getValue('customerPhone')}</div>
       ),
-      size: columnWidths.customerPhone || 140,
-      minSize: getColumnConstraints('customerPhone').minWidth,
-      maxSize: getColumnConstraints('customerPhone').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'includesString',
@@ -791,11 +663,8 @@ const CustomerReport: React.FC = () => {
       header: 'Birthday',
       cell: ({ row }) => {
         const birthday = row.getValue('customerBirthday') as string | null
-        return <div className="whitespace-nowrap">{birthday ? formatDate(birthday) : '-'}</div>
+        return <div className="w-[90px] whitespace-nowrap">{birthday ? formatDate(birthday) : '-'}</div>
       },
-      size: columnWidths.customerBirthday || 100,
-      minSize: getColumnConstraints('customerBirthday').minWidth,
-      maxSize: getColumnConstraints('customerBirthday').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'birthdayBetween',
@@ -813,14 +682,11 @@ const CustomerReport: React.FC = () => {
       cell: ({ row }) => {
         const beautician = row.getValue('onboardingBeautician') as string
         return (
-          <div className="whitespace-nowrap">
+          <div className="w-[150px] whitespace-nowrap">
             {beautician}
           </div>
         )
       },
-      size: columnWidths.onboardingBeautician || 150,
-      minSize: getColumnConstraints('onboardingBeautician').minWidth,
-      maxSize: getColumnConstraints('onboardingBeautician').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'arrIncludesSome',
@@ -840,15 +706,12 @@ const CustomerReport: React.FC = () => {
         const beauticians = row.getValue('beauticians') as string
         return (
           <Tooltip content={beauticians}>
-            <div className="truncate cursor-help">
+            <div className="max-w-[250px] truncate cursor-help">
               {beauticians}
             </div>
           </Tooltip>
         )
       },
-      size: columnWidths.beauticians || 200,
-      minSize: getColumnConstraints('beauticians').minWidth,
-      maxSize: getColumnConstraints('beauticians').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'arrIncludesSome',
@@ -866,11 +729,8 @@ const CustomerReport: React.FC = () => {
         </Tooltip>
       ),
       cell: ({ row }) => (
-        <div className="whitespace-nowrap text-center">{row.getValue('totalTransactions')}</div>
+        <div className="w-20 whitespace-nowrap text-center">{row.getValue('totalTransactions')}</div>
       ),
-      size: columnWidths.totalTransactions || 100,
-      minSize: getColumnConstraints('totalTransactions').minWidth,
-      maxSize: getColumnConstraints('totalTransactions').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'inNumberRange',
@@ -887,11 +747,8 @@ const CustomerReport: React.FC = () => {
       ),
       cell: ({ row }) => {
         const date = row.getValue('firstVisitDate') as string | null
-        return <div className="whitespace-nowrap">{date ? formatDate(date) : '-'}</div>
+        return <div className="w-[90px] whitespace-nowrap">{date ? formatDate(date) : '-'}</div>
       },
-      size: columnWidths.firstVisitDate || 105,
-      minSize: getColumnConstraints('firstVisitDate').minWidth,
-      maxSize: getColumnConstraints('firstVisitDate').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'dateBetween',
@@ -908,11 +765,8 @@ const CustomerReport: React.FC = () => {
       ),
       cell: ({ row }) => {
         const date = row.getValue('lastVisitDate') as string | null
-        return <div className="whitespace-nowrap">{date ? formatDate(date) : '-'}</div>
+        return <div className="w-[90px] whitespace-nowrap">{date ? formatDate(date) : '-'}</div>
       },
-      size: columnWidths.lastVisitDate || 105,
-      minSize: getColumnConstraints('lastVisitDate').minWidth,
-      maxSize: getColumnConstraints('lastVisitDate').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'dateBetween',
@@ -929,11 +783,8 @@ const CustomerReport: React.FC = () => {
       ),
       cell: ({ row }) => {
         const days = row.getValue('daysSinceLastVisit') as number | null
-        return <div className="whitespace-nowrap text-center">{days !== null ? days : '-'}</div>
+        return <div className="w-28 whitespace-nowrap text-center">{days !== null ? days : '-'}</div>
       },
-      size: columnWidths.daysSinceLastVisit || 120,
-      minSize: getColumnConstraints('daysSinceLastVisit').minWidth,
-      maxSize: getColumnConstraints('daysSinceLastVisit').maxWidth,
       enableSorting: true,
     },
     // Transaction Metrics
@@ -945,11 +796,8 @@ const CustomerReport: React.FC = () => {
         </Tooltip>
       ),
       cell: ({ row }) => (
-        <div className="whitespace-nowrap text-right">{formatCurrency(row.getValue('totalRevenue'))}</div>
+        <div className="w-20 whitespace-nowrap text-right">{formatCurrency(row.getValue('totalRevenue'))}</div>
       ),
-      size: columnWidths.totalRevenue || 130,
-      minSize: getColumnConstraints('totalRevenue').minWidth,
-      maxSize: getColumnConstraints('totalRevenue').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'inNumberRange',
@@ -966,11 +814,8 @@ const CustomerReport: React.FC = () => {
         </Tooltip>
       ),
       cell: ({ row }) => (
-        <div className="whitespace-nowrap text-right">{formatCurrency(row.getValue('avgTransactionAmount'))}</div>
+        <div className="w-20 whitespace-nowrap text-right">{formatCurrency(row.getValue('avgTransactionAmount'))}</div>
       ),
-      size: columnWidths.avgTransactionAmount || 130,
-      minSize: getColumnConstraints('avgTransactionAmount').minWidth,
-      maxSize: getColumnConstraints('avgTransactionAmount').maxWidth,
       enableSorting: true,
     },
     // Purchase Behavior
@@ -988,14 +833,11 @@ const CustomerReport: React.FC = () => {
       cell: ({ row }) => {
         const data = row.original.totalServices as { amount: number; count: number }
         return (
-          <div className="whitespace-nowrap text-right">
+          <div className="w-20 whitespace-nowrap text-right">
             {formatCurrency(data.amount)} ({data.count})
           </div>
         )
       },
-      size: columnWidths.totalServices || 150,
-      minSize: getColumnConstraints('totalServices').minWidth,
-      maxSize: getColumnConstraints('totalServices').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'inNumberRange',
@@ -1017,14 +859,11 @@ const CustomerReport: React.FC = () => {
       cell: ({ row }) => {
         const data = row.original.totalItems as { amount: number; count: number }
         return (
-          <div className="whitespace-nowrap text-right">
+          <div className="w-24 whitespace-nowrap text-right">
             {formatCurrency(data.amount)} ({data.count})
           </div>
         )
       },
-      size: columnWidths.totalItems || 150,
-      minSize: getColumnConstraints('totalItems').minWidth,
-      maxSize: getColumnConstraints('totalItems').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'inNumberRange',
@@ -1043,15 +882,12 @@ const CustomerReport: React.FC = () => {
         const services = row.getValue('topServices') as string
         return (
           <Tooltip content={services}>
-            <div className="truncate cursor-help">
+            <div className="max-w-[200px] truncate cursor-help">
               {services}
             </div>
           </Tooltip>
         )
       },
-      size: columnWidths.topServices || 200,
-      minSize: getColumnConstraints('topServices').minWidth,
-      maxSize: getColumnConstraints('topServices').maxWidth,
       enableSorting: true,
     },
     {
@@ -1070,7 +906,7 @@ const CustomerReport: React.FC = () => {
           'New': 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
         }
         return (
-          <div>
+          <div className="w-24">
             <Badge
               variant="outline"
               className={`text-xs whitespace-nowrap ${colorMap[status] || ''}`}
@@ -1080,9 +916,6 @@ const CustomerReport: React.FC = () => {
           </div>
         )
       },
-      size: columnWidths.customerStatus || 105,
-      minSize: getColumnConstraints('customerStatus').minWidth,
-      maxSize: getColumnConstraints('customerStatus').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'arrIncludesSome',
@@ -1109,7 +942,7 @@ const CustomerReport: React.FC = () => {
           'PLATINUM': { className: 'border-blue-600 text-blue-700 bg-blue-50' }
         }
         return (
-          <div>
+          <div className="w-28">
             <Badge
               variant="outline"
               className={`text-xs whitespace-nowrap ${rankStyles[rank]?.className || ''}`}
@@ -1119,9 +952,6 @@ const CustomerReport: React.FC = () => {
           </div>
         )
       },
-      size: columnWidths.customerRank || 120,
-      minSize: getColumnConstraints('customerRank').minWidth,
-      maxSize: getColumnConstraints('customerRank').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'arrIncludesSome',
@@ -1184,9 +1014,9 @@ const CustomerReport: React.FC = () => {
     [exportColumns]
   )
 
-  // Default selected columns (exclude: Membership ID, Onboarding Beautician, All Beautician, Avg Transaction)
+  // Default selected columns (exclude: Membership ID, Onboarding Beautician, All Beautician, Avg Transaction, Days Since Visit)
   const defaultSelectedColumnIds = useMemo(() => {
-    const excludeHeaders = ['Membership ID', 'Onboarding Beautician', 'All Beauticians', 'Avg Transaction']
+    const excludeHeaders = ['Membership ID', 'Onboarding Beautician', 'All Beauticians', 'Avg Transaction', 'Days Since Visit']
     return columnOptions
       .filter(col => !excludeHeaders.includes(col.label))
       .map(col => col.id)
