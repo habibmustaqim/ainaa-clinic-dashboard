@@ -11,6 +11,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { ColumnSelectionModal, ColumnOption, FilenameToken } from '@/components/ui/ColumnSelectionModal'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 import { exportData, ExportColumn } from '@/utils/exportUtils'
+import { calculateColumnWidth, getColumnConstraints, formatCurrencyForSizing, formatDateForSizing } from '@/utils/columnSizing'
 import { supabase } from '@/lib/supabase'
 
 // Column Filter Components
@@ -33,8 +34,8 @@ interface CustomerReportRow {
   totalRevenue: number
   totalDiscount: number
   avgTransactionAmount: number
-  totalServices: number
-  totalItems: number
+  totalServices: { amount: number; count: number }
+  totalItems: { amount: number; count: number }
 
   // Visit Metrics
   firstVisitDate: string | null
@@ -136,12 +137,44 @@ const CustomerReport: React.FC = () => {
 
     if (validEntries.length === 0) return '-'
 
-    // Sort by date ascending (earliest first)
-    const sorted = validEntries.sort((a, b) =>
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    )
+    // Count frequency per beautician and track earliest date
+    const frequencyMap = new Map<string, { count: number; earliestDate: Date }>()
 
-    return sorted[0].name.trim()
+    validEntries.forEach(entry => {
+      const name = entry.name.trim()
+      const date = new Date(entry.date)
+      const current = frequencyMap.get(name)
+
+      if (!current) {
+        frequencyMap.set(name, { count: 1, earliestDate: date })
+      } else {
+        current.count++
+        if (date < current.earliestDate) {
+          current.earliestDate = date
+        }
+      }
+    })
+
+    // Find beautician(s) with highest transaction frequency
+    let maxCount = 0
+    let winners: Array<{ name: string; earliestDate: Date }> = []
+
+    frequencyMap.forEach((stats, name) => {
+      if (stats.count > maxCount) {
+        maxCount = stats.count
+        winners = [{ name, earliestDate: stats.earliestDate }]
+      } else if (stats.count === maxCount) {
+        winners.push({ name, earliestDate: stats.earliestDate })
+      }
+    })
+
+    // If tie in frequency, fallback to earliest first transaction date
+    if (winners.length === 1) {
+      return winners[0].name
+    }
+
+    winners.sort((a, b) => a.earliestDate.getTime() - b.earliestDate.getTime())
+    return winners[0].name
   }
 
   const getBeauticians = (serviceSales: any[], items: any[], topN = 10) => {
@@ -307,6 +340,7 @@ const CustomerReport: React.FC = () => {
         })
 
         // Build customer report rows
+        let debugCustomerCount = 0
         const customerReportRows: CustomerReportRow[] = allCustomers?.map(customer => {
           const customerTransactions = transactionsByCustomer[customer.id] || []
           const customerServiceSales = serviceSalesByCustomer[customer.id] || []
@@ -314,11 +348,56 @@ const CustomerReport: React.FC = () => {
 
           // Calculate metrics
           const totalTransactions = customerTransactions.length
+
+          // Calculate service sales total and count
+          const totalServicesAmount = customerServiceSales.reduce((sum, s) => sum + (s.payment_amount || 0), 0)
+          const totalServicesCount = customerServiceSales.length
+
+          // Calculate items total and count
+          const totalItemsAmount = customerItems.reduce((sum, i) => sum + (i.total_price || 0), 0)
+          const totalItemsCount = customerItems.length
+
+          // Total revenue comes from transactions only (payment_to_date already includes services and items)
           const totalRevenue = customerTransactions.reduce((sum, t) => sum + (t.payment_to_date || 0), 0)
+
           const totalDiscount = customerTransactions.reduce((sum, t) => sum + (t.total_discount || 0), 0)
           const avgTransactionAmount = totalTransactions > 0 ? totalRevenue / totalTransactions : 0
-          const totalServices = customerServiceSales.length
-          const totalItems = customerItems.length
+          const totalServices = { amount: totalServicesAmount, count: totalServicesCount }
+          const totalItems = { amount: totalItemsAmount, count: totalItemsCount }
+
+          // Debug first 5 customers to investigate revenue calculation
+          if (debugCustomerCount < 5) {
+            console.log(`\n━━━ CUSTOMER #${debugCustomerCount + 1}: ${customer.name} ━━━`)
+            console.log(`Customer ID: ${customer.id}`)
+            debugCustomerCount++
+
+            console.log(`\n📋 TRANSACTIONS (${customerTransactions.length}):`)
+            customerTransactions.forEach((t, i) => {
+              console.log(`  ${i+1}. ID: ${t.id?.slice(0,8)}... | payment_to_date: ${t.payment_to_date}`)
+            })
+            console.log(`  ➜ Transactions Revenue: RM ${totalRevenue.toFixed(2)}`)
+
+            console.log(`\n💆 SERVICE SALES (${customerServiceSales.length}):`)
+            customerServiceSales.forEach((s, i) => {
+              console.log(`  ${i+1}. ID: ${s.id?.slice(0,8)}... | payment_amount: ${s.payment_amount}`)
+            })
+            console.log(`  ➜ Services Amount: RM ${totalServicesAmount.toFixed(2)}`)
+
+            console.log(`\n🛍️  ITEMS (${customerItems.length}):`)
+            customerItems.forEach((item, i) => {
+              console.log(`  ${i+1}. ID: ${item.id?.slice(0,8)}... | total_price: ${item.total_price}`)
+            })
+            console.log(`  ➜ Items Amount: RM ${totalItemsAmount.toFixed(2)}`)
+
+            console.log(`\n💰 REVENUE CALCULATION:`)
+            console.log(`  Total Revenue (from transactions): RM ${totalRevenue.toFixed(2)}`)
+            console.log(`  `)
+            console.log(`  Breakdown (already included in total):`)
+            console.log(`    - Services:     RM ${totalServicesAmount.toFixed(2)} (${totalServicesCount})`)
+            console.log(`    - Items:        RM ${totalItemsAmount.toFixed(2)} (${totalItemsCount})`)
+            console.log(`  `)
+            console.log(`  Note: Services and items are breakdowns, not additive!`)
+          }
 
           // Visit dates
           const sortedDates = customerTransactions
@@ -506,6 +585,125 @@ const CustomerReport: React.FC = () => {
       .map(name => ({ value: name, label: name }))
   }, [rawData])
 
+  // Calculate optimal column widths based on content
+  const columnWidths = useMemo(() => {
+    if (!rawData || rawData.length === 0) {
+      // Return default widths if no data
+      return {}
+    }
+
+    return {
+      membershipNumber: calculateColumnWidth(
+        rawData,
+        'membershipNumber',
+        'Membership ID',
+        { ...getColumnConstraints('membershipNumber') }
+      ),
+      customerName: calculateColumnWidth(
+        rawData,
+        'customerName',
+        'Customer',
+        { ...getColumnConstraints('customerName') }
+      ),
+      customerPhone: calculateColumnWidth(
+        rawData,
+        'customerPhone',
+        'Phone',
+        { ...getColumnConstraints('customerPhone') }
+      ),
+      customerBirthday: calculateColumnWidth(
+        rawData,
+        (row) => row.customerBirthday ? formatDateForSizing(row.customerBirthday) : '-',
+        'Birthday',
+        { ...getColumnConstraints('customerBirthday') }
+      ),
+      onboardingBeautician: calculateColumnWidth(
+        rawData,
+        'onboardingBeautician',
+        'Onboarding Beautician',
+        { ...getColumnConstraints('onboardingBeautician') }
+      ),
+      beauticians: calculateColumnWidth(
+        rawData,
+        'beauticians',
+        'All Beauticians',
+        { ...getColumnConstraints('beauticians') }
+      ),
+      totalTransactions: calculateColumnWidth(
+        rawData,
+        'totalTransactions',
+        'Total Visits',
+        { ...getColumnConstraints('totalTransactions') }
+      ),
+      firstVisitDate: calculateColumnWidth(
+        rawData,
+        (row) => row.firstVisitDate ? formatDateForSizing(row.firstVisitDate) : '-',
+        'First Visit',
+        { ...getColumnConstraints('firstVisitDate') }
+      ),
+      lastVisitDate: calculateColumnWidth(
+        rawData,
+        (row) => row.lastVisitDate ? formatDateForSizing(row.lastVisitDate) : '-',
+        'Last Visit',
+        { ...getColumnConstraints('lastVisitDate') }
+      ),
+      daysSinceLastVisit: calculateColumnWidth(
+        rawData,
+        (row) => row.daysSinceLastVisit !== null ? row.daysSinceLastVisit.toString() : '-',
+        'Days Since Visit',
+        { ...getColumnConstraints('daysSinceLastVisit') }
+      ),
+      totalRevenue: calculateColumnWidth(
+        rawData,
+        (row) => formatCurrencyForSizing(row.totalRevenue),
+        'Total Revenue',
+        { ...getColumnConstraints('totalRevenue') }
+      ),
+      avgTransactionAmount: calculateColumnWidth(
+        rawData,
+        (row) => formatCurrencyForSizing(row.avgTransactionAmount),
+        'Avg Transaction',
+        { ...getColumnConstraints('avgTransactionAmount') }
+      ),
+      totalServices: calculateColumnWidth(
+        rawData,
+        (row) => {
+          const data = row.totalServices as { amount: number; count: number }
+          return `${formatCurrencyForSizing(data.amount)} (${data.count})`
+        },
+        'Total Services',
+        { ...getColumnConstraints('totalServices') }
+      ),
+      totalItems: calculateColumnWidth(
+        rawData,
+        (row) => {
+          const data = row.totalItems as { amount: number; count: number }
+          return `${formatCurrencyForSizing(data.amount)} (${data.count})`
+        },
+        'Total Items',
+        { ...getColumnConstraints('totalItems') }
+      ),
+      topServices: calculateColumnWidth(
+        rawData,
+        'topServices',
+        'Top Services',
+        { ...getColumnConstraints('topServices') }
+      ),
+      customerStatus: calculateColumnWidth(
+        rawData,
+        'customerStatus',
+        'Status',
+        { ...getColumnConstraints('customerStatus') }
+      ),
+      customerRank: calculateColumnWidth(
+        rawData,
+        'customerRank',
+        'Rank',
+        { ...getColumnConstraints('customerRank') }
+      ),
+    }
+  }, [rawData])
+
   // Table columns
   const columns: ColumnDef<CustomerReportRow>[] = useMemo(() => [
     {
@@ -537,8 +735,11 @@ const CustomerReport: React.FC = () => {
       ),
       cell: ({ row }) => {
         const membershipNumber = row.getValue('membershipNumber') as string
-        return <div className="w-[100px] text-center whitespace-nowrap">{membershipNumber}</div>
+        return <div className="text-center whitespace-nowrap">{membershipNumber}</div>
       },
+      size: columnWidths.membershipNumber || 120,
+      minSize: getColumnConstraints('membershipNumber').minWidth,
+      maxSize: getColumnConstraints('membershipNumber').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'includesString',
@@ -553,12 +754,15 @@ const CustomerReport: React.FC = () => {
         const name = row.getValue('customerName') as string
         return (
           <Tooltip content={name}>
-            <div className="max-w-[150px] truncate cursor-help">
+            <div className="truncate cursor-help">
               {name}
             </div>
           </Tooltip>
         )
       },
+      size: columnWidths.customerName || 180,
+      minSize: getColumnConstraints('customerName').minWidth,
+      maxSize: getColumnConstraints('customerName').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'includesString',
@@ -570,8 +774,11 @@ const CustomerReport: React.FC = () => {
       accessorKey: 'customerPhone',
       header: 'Phone',
       cell: ({ row }) => (
-        <div className="w-32 whitespace-nowrap">{row.getValue('customerPhone')}</div>
+        <div className="whitespace-nowrap">{row.getValue('customerPhone')}</div>
       ),
+      size: columnWidths.customerPhone || 140,
+      minSize: getColumnConstraints('customerPhone').minWidth,
+      maxSize: getColumnConstraints('customerPhone').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'includesString',
@@ -584,8 +791,11 @@ const CustomerReport: React.FC = () => {
       header: 'Birthday',
       cell: ({ row }) => {
         const birthday = row.getValue('customerBirthday') as string | null
-        return <div className="w-[90px] whitespace-nowrap">{birthday ? formatDate(birthday) : '-'}</div>
+        return <div className="whitespace-nowrap">{birthday ? formatDate(birthday) : '-'}</div>
       },
+      size: columnWidths.customerBirthday || 100,
+      minSize: getColumnConstraints('customerBirthday').minWidth,
+      maxSize: getColumnConstraints('customerBirthday').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'birthdayBetween',
@@ -603,11 +813,14 @@ const CustomerReport: React.FC = () => {
       cell: ({ row }) => {
         const beautician = row.getValue('onboardingBeautician') as string
         return (
-          <div className="w-[150px] whitespace-nowrap">
+          <div className="whitespace-nowrap">
             {beautician}
           </div>
         )
       },
+      size: columnWidths.onboardingBeautician || 150,
+      minSize: getColumnConstraints('onboardingBeautician').minWidth,
+      maxSize: getColumnConstraints('onboardingBeautician').maxWidth,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'arrIncludesSome',
@@ -717,7 +930,7 @@ const CustomerReport: React.FC = () => {
         </Tooltip>
       ),
       cell: ({ row }) => (
-        <div className="w-32 whitespace-nowrap text-right">{formatCurrency(row.getValue('totalRevenue'))}</div>
+        <div className="w-28 whitespace-nowrap text-right">{formatCurrency(row.getValue('totalRevenue'))}</div>
       ),
       enableSorting: true,
       enableColumnFilter: true,
@@ -735,21 +948,30 @@ const CustomerReport: React.FC = () => {
         </Tooltip>
       ),
       cell: ({ row }) => (
-        <div className="w-32 whitespace-nowrap text-right">{formatCurrency(row.getValue('avgTransactionAmount'))}</div>
+        <div className="w-28 whitespace-nowrap text-right">{formatCurrency(row.getValue('avgTransactionAmount'))}</div>
       ),
       enableSorting: true,
     },
     // Purchase Behavior
     {
       accessorKey: 'totalServices',
+      accessorFn: (row) => {
+        const data = row.totalServices as { amount: number; count: number }
+        return `${formatCurrency(data.amount)} (${data.count})`
+      },
       header: () => (
-        <Tooltip content="Count of services purchased by this customer" side="bottom">
+        <Tooltip content="Total amount from service sales (count of services)" side="bottom">
           <div className="cursor-help">Total Services</div>
         </Tooltip>
       ),
-      cell: ({ row }) => (
-        <div className="w-24 whitespace-nowrap text-center">{row.getValue('totalServices')}</div>
-      ),
+      cell: ({ row }) => {
+        const data = row.original.totalServices as { amount: number; count: number }
+        return (
+          <div className="w-32 whitespace-nowrap text-right">
+            {formatCurrency(data.amount)} ({data.count})
+          </div>
+        )
+      },
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'inNumberRange',
@@ -759,14 +981,23 @@ const CustomerReport: React.FC = () => {
     },
     {
       accessorKey: 'totalItems',
+      accessorFn: (row) => {
+        const data = row.totalItems as { amount: number; count: number }
+        return `${formatCurrency(data.amount)} (${data.count})`
+      },
       header: () => (
-        <Tooltip content="Count of product items purchased by this customer" side="bottom">
+        <Tooltip content="Total amount from product purchases (count of items)" side="bottom">
           <div className="cursor-help">Total Items</div>
         </Tooltip>
       ),
-      cell: ({ row }) => (
-        <div className="w-24 whitespace-nowrap text-center">{row.getValue('totalItems')}</div>
-      ),
+      cell: ({ row }) => {
+        const data = row.original.totalItems as { amount: number; count: number }
+        return (
+          <div className="w-36 whitespace-nowrap text-right">
+            {formatCurrency(data.amount)} ({data.count})
+          </div>
+        )
+      },
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: 'inNumberRange',
@@ -885,8 +1116,22 @@ const CustomerReport: React.FC = () => {
     { header: 'Total Revenue', accessor: (row: CustomerReportRow) => formatCurrency(row.totalRevenue), type: 'currency' },
     { header: 'Avg Transaction', accessor: (row: CustomerReportRow) => formatCurrency(row.avgTransactionAmount), type: 'currency' },
     // Purchase Behavior
-    { header: 'Total Services', accessor: 'totalServices', type: 'number' },
-    { header: 'Total Items', accessor: 'totalItems', type: 'number' },
+    {
+      header: 'Total Services',
+      accessor: (row: CustomerReportRow) => {
+        const data = row.totalServices as { amount: number; count: number }
+        return `${formatCurrency(data.amount)} (${data.count})`
+      },
+      type: 'text'
+    },
+    {
+      header: 'Total Items',
+      accessor: (row: CustomerReportRow) => {
+        const data = row.totalItems as { amount: number; count: number }
+        return `${formatCurrency(data.amount)} (${data.count})`
+      },
+      type: 'text'
+    },
     { header: 'Top Services', accessor: 'topServices', width: 28, type: 'text' },
     // Segmentation
     { header: 'Status', accessor: 'customerStatus', type: 'text' },
@@ -902,6 +1147,14 @@ const CustomerReport: React.FC = () => {
     })),
     [exportColumns]
   )
+
+  // Default selected columns (exclude: Membership ID, Onboarding Beautician, All Beautician, Avg Transaction)
+  const defaultSelectedColumnIds = useMemo(() => {
+    const excludeHeaders = ['Membership ID', 'Onboarding Beautician', 'All Beauticians', 'Avg Transaction']
+    return columnOptions
+      .filter(col => !excludeHeaders.includes(col.label))
+      .map(col => col.id)
+  }, [columnOptions])
 
   // Available filename tokens
   const availableFilenameTokens: FilenameToken[] = [
@@ -964,9 +1217,9 @@ const CustomerReport: React.FC = () => {
   const handleColumnSelectionConfirm = (selectedColumnIds: string[], customFilename: string) => {
     if (!pendingExportFormat) return
 
-    // Get filtered data first to extract column values
+    // Get filtered and sorted data first to extract column values
     const filteredData = tableInstance
-      ? tableInstance.getFilteredRowModel().rows.map((row: any) => row.original)
+      ? tableInstance.getSortedRowModel().rows.map((row: any) => row.original)
       : rawData
 
     // Process filename with token replacements
@@ -1178,6 +1431,8 @@ const CustomerReport: React.FC = () => {
         title="Select Columns to Export"
         availableTokens={availableFilenameTokens}
         tableInstance={tableInstance}
+        defaultSelectedIds={defaultSelectedColumnIds}
+        defaultFilenameTokens={['Onboarding Beautician', 'Rank', 'Current Date']}
       />
     </Layout>
   )
